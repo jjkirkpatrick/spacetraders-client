@@ -13,12 +13,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// APIClient is an interface for making API calls
-type APIClient interface {
-	GetAgent() (*models.Agent, error)
-	// ... (other API methods)
-}
-
 // ClientOptions represents the configuration options for the SpaceTraders API client
 type ClientOptions struct {
 	BaseURL           string
@@ -101,33 +95,33 @@ func (c *Client) SetToken(token string) {
 	c.token = token
 }
 
-// Get sends a GET request to the specified endpoint
-func (c *Client) Get(endpoint string, result interface{}) error {
-	return c.sendRequest("GET", endpoint, nil, result)
+// Get sends a GET request to the specified endpoint with optional query parameters
+func (c *Client) Get(endpoint string, queryParams map[string]string, result interface{}) error {
+	return c.sendRequest("GET", endpoint, nil, queryParams, result)
 }
 
-// Post sends a POST request to the specified endpoint
-func (c *Client) Post(endpoint string, body, result interface{}) error {
-	return c.sendRequest("POST", endpoint, body, result)
+// Post sends a POST request to the specified endpoint with optional query parameters
+func (c *Client) Post(endpoint string, body interface{}, queryParams map[string]string, result interface{}) error {
+	return c.sendRequest("POST", endpoint, body, queryParams, result)
 }
 
-// Put sends a PUT request to the specified endpoint
-func (c *Client) Put(endpoint string, body, result interface{}) error {
-	return c.sendRequest("PUT", endpoint, body, result)
+// Put sends a PUT request to the specified endpoint with optional query parameters
+func (c *Client) Put(endpoint string, body interface{}, queryParams map[string]string, result interface{}) error {
+	return c.sendRequest("PUT", endpoint, body, queryParams, result)
 }
 
-// Delete sends a DELETE request to the specified endpoint
-func (c *Client) Delete(endpoint string, result interface{}) error {
-	return c.sendRequest("DELETE", endpoint, nil, result)
+// Delete sends a DELETE request to the specified endpoint with optional query parameters
+func (c *Client) Delete(endpoint string, queryParams map[string]string, result interface{}) error {
+	return c.sendRequest("DELETE", endpoint, nil, queryParams, result)
 }
 
-// Patch sends a PATCH request to the specified endpoint
-func (c *Client) Patch(endpoint string, body, result interface{}) error {
-	return c.sendRequest("PATCH", endpoint, body, result)
+// Patch sends a PATCH request to the specified endpoint with optional query parameters
+func (c *Client) Patch(endpoint string, body interface{}, queryParams map[string]string, result interface{}) error {
+	return c.sendRequest("PATCH", endpoint, body, queryParams, result)
 }
 
-// sendRequest is a helper method to send requests with rate limiting and automatic retry on rate limit errors
-func (c *Client) sendRequest(method, endpoint string, body, result interface{}) error {
+// sendRequest is a helper method to send requests with rate limiting, automatic retry on rate limit errors, pagination support, and query parameters
+func (c *Client) sendRequest(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) error {
 	err := c.limiter.Wait(c.context)
 	if err != nil {
 		return fmt.Errorf("rate limit exceeded: %v", err)
@@ -140,6 +134,10 @@ func (c *Client) sendRequest(method, endpoint string, body, result interface{}) 
 
 	if body != nil {
 		request.SetBody(body)
+	}
+
+	if queryParams != nil {
+		request.SetQueryParams(queryParams)
 	}
 
 	var resp *resty.Response
@@ -199,12 +197,30 @@ func (c *Client) GetPublicAgent(agentSymbol string) (*models.Agent, error) {
 	return api.GetPublicAgent(c.Get, agentSymbol)
 }
 
-func (c *Client) ListAgents(limit, page int) ([]*models.Agent, error) {
-	return api.ListAgents(c.Get, limit, page)
+func (c *Client) ListAgents() (*Paginator[*models.Agent], error) {
+	fetchFunc := func(meta models.Meta) ([]*models.Agent, models.Meta, error) {
+		// Since api.ListAgents expects a pointer to models.Meta, create a pointer from the value.
+		metaPtr := &meta
+		// Call api.ListAgents with a pointer to meta.
+		agents, metaPtr, err := api.ListAgents(c.Get, metaPtr)
+		// Dereference metaPtr when returning to match the expected return types.
+		return agents, *metaPtr, err
+	}
+	// Initialize the paginator with the fetch function.
+	return NewPaginator[*models.Agent](fetchFunc).FetchFirstPage()
 }
 
-func (c *Client) ListContracts(limit, page int) ([]*models.Contract, error) {
-	return api.ListContracts(c.Get, limit, page)
+func (c *Client) ListContracts() (*Paginator[*models.Contract], error) {
+	fetchFunc := func(meta models.Meta) ([]*models.Contract, models.Meta, error) {
+		// Since api.ListAgents expects a pointer to models.Meta, create a pointer from the value.
+		metaPtr := &meta
+		// Call api.ListAgents with a pointer to meta.
+		agents, metaPtr, err := api.ListContracts(c.Get, metaPtr)
+		// Dereference metaPtr when returning to match the expected return types.
+		return agents, *metaPtr, err
+	}
+	// Initialize the paginator with the fetch function.
+	return NewPaginator[*models.Contract](fetchFunc).FetchFirstPage()
 }
 
 func (c *Client) GetContract(contractId string) (*models.Contract, error) {

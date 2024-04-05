@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -22,13 +21,14 @@ func main() {
 		logger.Fatalf("Failed to create client and register agent: %v", err)
 	}
 
-	agent, contract, err := client.FulfilContract("cluk89lvh36rbs60c4i01lvhe")
+	contracts, err := client.ListContracts()
 
 	if err != nil {
-		logger.Fatalf("Failed to fulfil contract: %v", err)
+		logger.Fatalf("Failed to list contracts: %v", err)
 	}
 
-	fmt.Printf("Agent Symbol: %s\n", agent.Symbol)
-	fmt.Printf("Contract ID: %s\n", contract.ID)
+	for _, contract := range contracts.Data {
+		logger.Printf("Contract ID: %s\n", contract.ID)
+	}
 
 }

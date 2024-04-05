@@ -8,7 +8,7 @@ import (
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 )
 
-func mexample_create_client() {
+func example_create_client() {
 	// Set up the logger
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 
@@ -24,7 +24,7 @@ func mexample_create_client() {
 
 	// Use the client to make API requests
 	var result map[string]interface{}
-	err = client.Get("/my/agent", &result)
+	err = client.Get("/my/agent", nil, &result)
 	if err != nil {
 		logger.Fatalf("Failed to retrieve agent details: %v", err)
 	}

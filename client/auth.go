@@ -31,7 +31,7 @@ func (c *Client) RegisterNewAgent(faction, symbol, email string) error {
 	}
 
 	var registerResp RegisterResponse
-	err := c.Post("/register", registerReq, &registerResp)
+	err := c.Post("/register", registerReq, nil, &registerResp)
 	if err != nil {
 		return err
 	}

@@ -34,16 +34,13 @@ func getContractAndAccept() {
 	fmt.Printf("Agent Headquarters: %s\n", agent.Headquarters)
 
 	// List available contracts
-	const pageSize = 5
-	const pageNumber = 1
-
-	contracts, err := client.ListContracts(pageSize, pageNumber)
+	contracts, err := client.ListContracts()
 	if err != nil {
 		logger.Fatalf("Failed to list contracts: %v", err)
 	}
 
-	fmt.Printf("Available Contracts (Page %d):\n", pageNumber)
-	for _, contract := range contracts {
+	fmt.Println("Available Contracts:")
+	for _, contract := range contracts.Data {
 		fmt.Printf("- Contract ID: %s\n", contract.ID)
 	}
 

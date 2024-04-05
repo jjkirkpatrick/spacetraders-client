@@ -7,9 +7,9 @@ import (
 )
 
 // GetFunc is a function type that sends a GET request to the specified endpoint
-type GetFunc func(endpoint string, result interface{}) error
-type PostFunc func(endpoint string, payload interface{}, result interface{}) error
-type PutFunc func(endpoint string, payload interface{}, result interface{}) error
+type GetFunc func(endpoint string, queryParams map[string]string, result interface{}) error
+type PostFunc func(endpoint string, payload interface{}, queryParams map[string]string, result interface{}) error
+type PutFunc func(endpoint string, payload interface{}, queryParams map[string]string, result interface{}) error
 type DeleteFunc func(endpoint string) error
 type PatchFunc func(endpoint string, payload interface{}, result interface{}) error
 
@@ -21,7 +21,7 @@ func GetAgent(get GetFunc) (*models.Agent, error) {
 		Data models.Agent `json:"data"`
 	}
 
-	err := get(endpoint, &response)
+	err := get(endpoint, nil, &response)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agent details: %v", err)
 	}
@@ -36,17 +36,22 @@ type listAgentsResponse struct {
 }
 
 // ListAgents retrieves a list of agents with pagination
-func ListAgents(get GetFunc, limit, page int) ([]*models.Agent, error) {
-	endpoint := fmt.Sprintf("/agents?limit=%d&page=%d", limit, page)
+func ListAgents(get GetFunc, meta *models.Meta) ([]*models.Agent, *models.Meta, error) {
+	endpoint := "/agents"
 
 	var response listAgentsResponse
 
-	err := get(endpoint, &response)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list agents: %v", err)
+	queryParams := map[string]string{
+		"page":  fmt.Sprintf("%d", meta.Page),
+		"limit": fmt.Sprintf("%d", meta.Limit),
 	}
 
-	return response.Data, nil
+	err := get(endpoint, queryParams, &response)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list agents: %v", err)
+	}
+
+	return response.Data, &response.Meta, nil
 }
 
 // GetPublicAgentResponse represents the response from the GetPublicAgent endpoint
@@ -60,7 +65,7 @@ func GetPublicAgent(get GetFunc, agentSymbol string) (*models.Agent, error) {
 
 	var response GetPublicAgentResponse
 
-	err := get(endpoint, &response)
+	err := get(endpoint, nil, &response)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get public agent: %v", err)
 	}

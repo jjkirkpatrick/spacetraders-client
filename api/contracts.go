@@ -11,17 +11,22 @@ type listContractResponse struct {
 	Meta models.Meta        `json:"meta"`
 }
 
-func ListContracts(get GetFunc, limit, page int) ([]*models.Contract, error) {
-	endpoint := fmt.Sprintf("/my/contracts?limit=%d&page=%d", limit, page)
+func ListContracts(get GetFunc, meta *models.Meta) ([]*models.Contract, *models.Meta, error) {
+	endpoint := "/my/contracts"
 
 	var response listContractResponse
 
-	err := get(endpoint, &response)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list agents: %v", err)
+	queryParams := map[string]string{
+		"page":  fmt.Sprintf("%d", meta.Page),
+		"limit": fmt.Sprintf("%d", meta.Limit),
 	}
 
-	return response.Data, nil
+	err := get(endpoint, queryParams, &response)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list contracts: %v", err)
+	}
+
+	return response.Data, &response.Meta, nil
 }
 
 func GetContract(get GetFunc, contractId string) (*models.Contract, error) {
@@ -31,7 +36,7 @@ func GetContract(get GetFunc, contractId string) (*models.Contract, error) {
 		Data models.Contract `json:"data"`
 	}
 
-	err := get(endpoint, &response)
+	err := get(endpoint, nil, &response)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agent details: %v", err)
 	}
@@ -49,7 +54,7 @@ func AcceptContract(post PostFunc, contractId string) (*models.Agent, *models.Co
 		}
 	}
 
-	err := post(endpoint, nil, &response)
+	err := post(endpoint, nil, nil, &response)
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get agent details: %v", err)
@@ -69,7 +74,7 @@ func DeliverContractCargo(post PostFunc, contractId string, body models.DeliverC
 		}
 	}
 
-	err := post(endpoint, body, &response)
+	err := post(endpoint, body, nil, &response)
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get agent details: %v", err)
@@ -88,7 +93,7 @@ func FulfillContract(post PostFunc, contractId string) (*models.Agent, *models.C
 		}
 	}
 
-	err := post(endpoint, nil, &response)
+	err := post(endpoint, nil, nil, &response)
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get agent details: %v", err)

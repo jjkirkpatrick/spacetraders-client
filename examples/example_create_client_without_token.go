@@ -27,7 +27,7 @@ func example_create_client_without_token() {
 
 	// Use the client to make API requests
 	var result map[string]interface{}
-	err = client.Get("/my/agent", &result)
+	err = client.Get("/my/agent", nil, &result)
 	if err != nil {
 		logger.Fatalf("Failed to retrieve agent details: %v", err)
 	}
