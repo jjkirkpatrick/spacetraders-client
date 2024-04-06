@@ -11,7 +11,7 @@ type listContractResponse struct {
 	Meta models.Meta        `json:"meta"`
 }
 
-func ListContracts(get GetFunc, meta *models.Meta) ([]*models.Contract, *models.Meta, error) {
+func ListContracts(get GetFunc, meta *models.Meta) ([]*models.Contract, *models.Meta, *models.APIError) {
 	endpoint := "/my/contracts"
 
 	var response listContractResponse
@@ -23,13 +23,13 @@ func ListContracts(get GetFunc, meta *models.Meta) ([]*models.Contract, *models.
 
 	err := get(endpoint, queryParams, &response)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to list contracts: %v", err)
+		return nil, nil, err
 	}
 
 	return response.Data, &response.Meta, nil
 }
 
-func GetContract(get GetFunc, contractId string) (*models.Contract, error) {
+func GetContract(get GetFunc, contractId string) (*models.Contract, *models.APIError) {
 	endpoint := fmt.Sprintf("/my/contracts/%s", contractId)
 
 	var response struct {
@@ -38,13 +38,13 @@ func GetContract(get GetFunc, contractId string) (*models.Contract, error) {
 
 	err := get(endpoint, nil, &response)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get agent details: %v", err)
+		return nil, err
 	}
 
 	return &response.Data, nil
 }
 
-func AcceptContract(post PostFunc, contractId string) (*models.Agent, *models.Contract, error) {
+func AcceptContract(post PostFunc, contractId string) (*models.Agent, *models.Contract, *models.APIError) {
 	endpoint := fmt.Sprintf("/my/contracts/%s/accept", contractId)
 
 	var response struct {
@@ -57,14 +57,14 @@ func AcceptContract(post PostFunc, contractId string) (*models.Agent, *models.Co
 	err := post(endpoint, nil, nil, &response)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get agent details: %v", err)
+		return nil, nil, err
 	}
 
 	return response.Data.Agent, response.Data.Contract, nil
 
 }
 
-func DeliverContractCargo(post PostFunc, contractId string, body models.DeliverContractCargoRequest) (*models.Contract, *models.Cargo, error) {
+func DeliverContractCargo(post PostFunc, contractId string, body models.DeliverContractCargoRequest) (*models.Contract, *models.Cargo, *models.APIError) {
 	endpoint := fmt.Sprintf("/my/contracts/%s/deliver", contractId)
 
 	var response struct {
@@ -77,13 +77,13 @@ func DeliverContractCargo(post PostFunc, contractId string, body models.DeliverC
 	err := post(endpoint, body, nil, &response)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get agent details: %v", err)
+		return nil, nil, err
 	}
 
 	return response.Data.Contract, response.Data.Cargo, nil
 }
 
-func FulfillContract(post PostFunc, contractId string) (*models.Agent, *models.Contract, error) {
+func FulfillContract(post PostFunc, contractId string) (*models.Agent, *models.Contract, *models.APIError) {
 	endpoint := fmt.Sprintf("/my/contracts/%s/fulfill", contractId)
 
 	var response struct {
@@ -96,7 +96,7 @@ func FulfillContract(post PostFunc, contractId string) (*models.Agent, *models.C
 	err := post(endpoint, nil, nil, &response)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get agent details: %v", err)
+		return nil, nil, err
 	}
 
 	return response.Data.Agent, response.Data.Contract, nil

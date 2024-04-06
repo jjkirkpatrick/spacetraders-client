@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -96,35 +97,35 @@ func (c *Client) SetToken(token string) {
 }
 
 // Get sends a GET request to the specified endpoint with optional query parameters
-func (c *Client) Get(endpoint string, queryParams map[string]string, result interface{}) error {
+func (c *Client) Get(endpoint string, queryParams map[string]string, result interface{}) *models.APIError {
 	return c.sendRequest("GET", endpoint, nil, queryParams, result)
 }
 
 // Post sends a POST request to the specified endpoint with optional query parameters
-func (c *Client) Post(endpoint string, body interface{}, queryParams map[string]string, result interface{}) error {
+func (c *Client) Post(endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 	return c.sendRequest("POST", endpoint, body, queryParams, result)
 }
 
 // Put sends a PUT request to the specified endpoint with optional query parameters
-func (c *Client) Put(endpoint string, body interface{}, queryParams map[string]string, result interface{}) error {
+func (c *Client) Put(endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 	return c.sendRequest("PUT", endpoint, body, queryParams, result)
 }
 
 // Delete sends a DELETE request to the specified endpoint with optional query parameters
-func (c *Client) Delete(endpoint string, queryParams map[string]string, result interface{}) error {
+func (c *Client) Delete(endpoint string, queryParams map[string]string, result interface{}) *models.APIError {
 	return c.sendRequest("DELETE", endpoint, nil, queryParams, result)
 }
 
 // Patch sends a PATCH request to the specified endpoint with optional query parameters
-func (c *Client) Patch(endpoint string, body interface{}, queryParams map[string]string, result interface{}) error {
+func (c *Client) Patch(endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 	return c.sendRequest("PATCH", endpoint, body, queryParams, result)
 }
 
 // sendRequest is a helper method to send requests with rate limiting, automatic retry on rate limit errors, pagination support, and query parameters
-func (c *Client) sendRequest(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) error {
+func (c *Client) sendRequest(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 	err := c.limiter.Wait(c.context)
 	if err != nil {
-		return fmt.Errorf("rate limit exceeded: %v", err)
+		return &models.APIError{Message: "rate limit exceeded", Code: 429}
 	}
 
 	request := c.httpClient.R().
@@ -154,7 +155,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 		case "PATCH":
 			resp, err = request.Patch(c.baseURL + endpoint)
 		default:
-			return fmt.Errorf("unsupported HTTP method: %s", method)
+			return &models.APIError{Message: "invalid request method", Code: 400}
 		}
 
 		if err != nil {
@@ -165,17 +166,21 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 					continue
 				}
 			}
-			return err
+			return &models.APIError{Message: err.Error(), Code: 500}
 		}
 
 		if resp.IsError() {
-			apiError := fmt.Errorf("API error: %s", resp.Status()+" "+string(resp.Body()))
-			return apiError
+			var errorWrapper struct {
+				Error models.APIError `json:"error"`
+			}
+			err := json.Unmarshal(resp.Body(), &errorWrapper)
+			if err != nil {
+				return &models.APIError{Message: "failed to parse API error response", Code: resp.StatusCode()}
+			}
+			return &errorWrapper.Error
 		}
-
 		break
 	}
-
 	return nil
 }
 
@@ -189,16 +194,16 @@ func (c *Client) GetToken() string {
 }
 
 // GetAgent retrieves the agent's details
-func (c *Client) GetAgent() (*models.Agent, error) {
+func (c *Client) GetAgent() (*models.Agent, *models.APIError) {
 	return api.GetAgent(c.Get)
 }
 
-func (c *Client) GetPublicAgent(agentSymbol string) (*models.Agent, error) {
+func (c *Client) GetPublicAgent(agentSymbol string) (*models.Agent, *models.APIError) {
 	return api.GetPublicAgent(c.Get, agentSymbol)
 }
 
-func (c *Client) ListAgents() (*Paginator[*models.Agent], error) {
-	fetchFunc := func(meta models.Meta) ([]*models.Agent, models.Meta, error) {
+func (c *Client) ListAgents() (*Paginator[*models.Agent], *models.APIError) {
+	fetchFunc := func(meta models.Meta) ([]*models.Agent, models.Meta, *models.APIError) {
 		// Since api.ListAgents expects a pointer to models.Meta, create a pointer from the value.
 		metaPtr := &meta
 		// Call api.ListAgents with a pointer to meta.
@@ -210,8 +215,8 @@ func (c *Client) ListAgents() (*Paginator[*models.Agent], error) {
 	return NewPaginator[*models.Agent](fetchFunc).FetchFirstPage()
 }
 
-func (c *Client) ListContracts() (*Paginator[*models.Contract], error) {
-	fetchFunc := func(meta models.Meta) ([]*models.Contract, models.Meta, error) {
+func (c *Client) ListContracts() (*Paginator[*models.Contract], *models.APIError) {
+	fetchFunc := func(meta models.Meta) ([]*models.Contract, models.Meta, *models.APIError) {
 		// Since api.ListAgents expects a pointer to models.Meta, create a pointer from the value.
 		metaPtr := &meta
 		// Call api.ListAgents with a pointer to meta.
@@ -223,27 +228,27 @@ func (c *Client) ListContracts() (*Paginator[*models.Contract], error) {
 	return NewPaginator[*models.Contract](fetchFunc).FetchFirstPage()
 }
 
-func (c *Client) GetContract(contractId string) (*models.Contract, error) {
+func (c *Client) GetContract(contractId string) (*models.Contract, *models.APIError) {
 	return api.GetContract(c.Get, contractId)
 }
 
-func (c *Client) AcceptContract(contractId string) (*models.Agent, *models.Contract, error) {
+func (c *Client) AcceptContract(contractId string) (*models.Agent, *models.Contract, *models.APIError) {
 	agent, contract, err := api.AcceptContract(c.Post, contractId)
 	return agent, contract, err
 }
 
-func (c *Client) DeliverContractCargo(contractId string, body models.DeliverContractCargoRequest) (*models.Contract, *models.Cargo, error) {
+func (c *Client) DeliverContractCargo(contractId string, body models.DeliverContractCargoRequest) (*models.Contract, *models.Cargo, *models.APIError) {
 	contract, cargo, err := api.DeliverContractCargo(c.Post, contractId, body)
 	return contract, cargo, err
 }
 
-func (c *Client) FulfilContract(contractId string) (*models.Agent, *models.Contract, error) {
+func (c *Client) FulfilContract(contractId string) (*models.Agent, *models.Contract, *models.APIError) {
 	agent, contract, err := api.FulfillContract(c.Post, contractId)
 	return agent, contract, err
 }
 
-func (c *Client) ListSystems() (*Paginator[*models.System], error) {
-	fetchFunc := func(meta models.Meta) ([]*models.System, models.Meta, error) {
+func (c *Client) ListSystems() (*Paginator[*models.System], *models.APIError) {
+	fetchFunc := func(meta models.Meta) ([]*models.System, models.Meta, *models.APIError) {
 		// Since api.ListSystems expects a pointer to models.Meta, create a pointer from the value.
 		metaPtr := &meta
 		// Call api.ListSystems with a pointer to meta.
@@ -255,34 +260,34 @@ func (c *Client) ListSystems() (*Paginator[*models.System], error) {
 	return NewPaginator[*models.System](fetchFunc).FetchFirstPage()
 }
 
-func (c *Client) GetSystem(systemSymbol string) (*models.System, error) {
+func (c *Client) GetSystem(systemSymbol string) (*models.System, *models.APIError) {
 	return api.GetSystem(c.Get, systemSymbol)
 }
 
-func (c *Client) ListWaypointsInSystem(systemSymbol string) ([]*models.Waypoint, error) {
+func (c *Client) ListWaypointsInSystem(systemSymbol string) ([]*models.Waypoint, *models.APIError) {
 	return api.ListWaypointsInSystem(c.Get, systemSymbol)
 }
 
-func (c *Client) GetWaypoint(systemSymbol, waypointSymbol string) (*models.Waypoint, error) {
+func (c *Client) GetWaypoint(systemSymbol, waypointSymbol string) (*models.Waypoint, *models.APIError) {
 	return api.GetWaypoint(c.Get, systemSymbol, waypointSymbol)
 }
 
-func (c *Client) GetMarket(systemSymbol, waypointSymbol string) (*models.Market, error) {
+func (c *Client) GetMarket(systemSymbol, waypointSymbol string) (*models.Market, *models.APIError) {
 	return api.GetMarket(c.Get, systemSymbol, waypointSymbol)
 }
 
-func (c *Client) GetShipyard(systemSymbol, waypointSymbol string) (*models.Shipyard, error) {
+func (c *Client) GetShipyard(systemSymbol, waypointSymbol string) (*models.Shipyard, *models.APIError) {
 	return api.GetShipyard(c.Get, systemSymbol, waypointSymbol)
 }
 
-func (c *Client) GetJumpGate(systemSymbol, waypointSymbol string) (*models.JumpGate, error) {
+func (c *Client) GetJumpGate(systemSymbol, waypointSymbol string) (*models.JumpGate, *models.APIError) {
 	return api.GetJumpGate(c.Get, systemSymbol, waypointSymbol)
 }
 
-func (c *Client) GetConstructionSite(systemSymbol, waypointSymbol string) (*models.ConstructionSite, error) {
+func (c *Client) GetConstructionSite(systemSymbol, waypointSymbol string) (*models.ConstructionSite, *models.APIError) {
 	return api.GetConstructionSite(c.Get, systemSymbol, waypointSymbol)
 }
 
-func (c *Client) SupplyConstructionSite(systemSymbol, waypointSymbol string, payload models.SupplyConstructionSiteRequest) (*models.ConstructionSite, error) {
+func (c *Client) SupplyConstructionSite(systemSymbol, waypointSymbol string, payload models.SupplyConstructionSiteRequest) (*models.ConstructionSite, *models.APIError) {
 	return api.SupplyConstructionSite(c.Post, systemSymbol, waypointSymbol, payload)
 }
