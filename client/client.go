@@ -370,10 +370,10 @@ func (c *Client) ListSystems() (*Paginator[*models.System], *models.APIError) {
 func (c *Client) GetSystem(systemSymbol string) (*models.System, *models.APIError) {
 	return api.GetSystem(c.Get, systemSymbol)
 }
-func (c *Client) ListWaypointsInSystem(systemSymbol string) (*Paginator[*models.Waypoint], *models.APIError) {
+func (c *Client) ListWaypointsInSystem(systemSymbol string, trait models.WaypointTrait, waypointType models.WaypointType) (*Paginator[*models.Waypoint], *models.APIError) {
 	fetchFunc := func(meta models.Meta) ([]*models.Waypoint, models.Meta, *models.APIError) {
 		metaPtr := &meta
-		waypoint, metaPtr, err := api.ListWaypointsInSystem(c.Get, metaPtr, systemSymbol)
+		waypoint, metaPtr, err := api.ListWaypointsInSystem(c.Get, metaPtr, systemSymbol, trait, waypointType)
 		if err != nil {
 			if metaPtr == nil {
 				// Use default Meta values or handle accordingly
