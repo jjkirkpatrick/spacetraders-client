@@ -6,20 +6,28 @@ import (
 	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
+type listSystemsResponse struct {
+	Data []*models.System `json:"data"`
+	Meta models.Meta      `json:"meta"`
+}
+
 // ListSystems retrieves a list of systems
-func ListSystems(get GetFunc) ([]*models.System, error) {
+func ListSystems(get GetFunc, meta *models.Meta) ([]*models.System, *models.Meta, error) {
 	endpoint := "/systems"
 
-	var response struct {
-		Data []*models.System `json:"data"`
+	var response listSystemsResponse
+
+	queryParams := map[string]string{
+		"page":  fmt.Sprintf("%d", meta.Page),
+		"limit": fmt.Sprintf("%d", meta.Limit),
 	}
 
-	err := get(endpoint, nil, &response)
+	err := get(endpoint, queryParams, &response)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list systems: %v", err)
+		return nil, nil, fmt.Errorf("failed to list agents: %v", err)
 	}
 
-	return response.Data, nil
+	return response.Data, &response.Meta, nil
 }
 
 // GetSystem retrieves the details of a specific system

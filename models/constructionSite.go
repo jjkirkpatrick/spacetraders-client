@@ -1,5 +1,11 @@
 package models
 
+type SupplyConstructionSiteRequest struct {
+	ShipSymbol  string `json:"shipSymbol"`
+	TradeSymbol string `json:"tradeSymbol"`
+	Units       int    `json:"units"`
+}
+
 type ConstructionSite struct {
 	Symbol     string     `json:"symbol"`
 	Materials  []Material `json:"materials"`

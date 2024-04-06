@@ -241,3 +241,48 @@ func (c *Client) FulfilContract(contractId string) (*models.Agent, *models.Contr
 	agent, contract, err := api.FulfillContract(c.Post, contractId)
 	return agent, contract, err
 }
+
+func (c *Client) ListSystems() (*Paginator[*models.System], error) {
+	fetchFunc := func(meta models.Meta) ([]*models.System, models.Meta, error) {
+		// Since api.ListSystems expects a pointer to models.Meta, create a pointer from the value.
+		metaPtr := &meta
+		// Call api.ListSystems with a pointer to meta.
+		systems, metaPtr, err := api.ListSystems(c.Get, metaPtr)
+		// Dereference metaPtr when returning to match the expected return types.
+		return systems, *metaPtr, err
+	}
+	// Initialize the paginator with the fetch function.
+	return NewPaginator[*models.System](fetchFunc).FetchFirstPage()
+}
+
+func (c *Client) GetSystem(systemSymbol string) (*models.System, error) {
+	return api.GetSystem(c.Get, systemSymbol)
+}
+
+func (c *Client) ListWaypointsInSystem(systemSymbol string) ([]*models.Waypoint, error) {
+	return api.ListWaypointsInSystem(c.Get, systemSymbol)
+}
+
+func (c *Client) GetWaypoint(systemSymbol, waypointSymbol string) (*models.Waypoint, error) {
+	return api.GetWaypoint(c.Get, systemSymbol, waypointSymbol)
+}
+
+func (c *Client) GetMarket(systemSymbol, waypointSymbol string) (*models.Market, error) {
+	return api.GetMarket(c.Get, systemSymbol, waypointSymbol)
+}
+
+func (c *Client) GetShipyard(systemSymbol, waypointSymbol string) (*models.Shipyard, error) {
+	return api.GetShipyard(c.Get, systemSymbol, waypointSymbol)
+}
+
+func (c *Client) GetJumpGate(systemSymbol, waypointSymbol string) (*models.JumpGate, error) {
+	return api.GetJumpGate(c.Get, systemSymbol, waypointSymbol)
+}
+
+func (c *Client) GetConstructionSite(systemSymbol, waypointSymbol string) (*models.ConstructionSite, error) {
+	return api.GetConstructionSite(c.Get, systemSymbol, waypointSymbol)
+}
+
+func (c *Client) SupplyConstructionSite(systemSymbol, waypointSymbol string, payload models.SupplyConstructionSiteRequest) (*models.ConstructionSite, error) {
+	return api.SupplyConstructionSite(c.Post, systemSymbol, waypointSymbol, payload)
+}

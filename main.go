@@ -21,14 +21,13 @@ func main() {
 		logger.Fatalf("Failed to create client and register agent: %v", err)
 	}
 
-	contracts, err := client.ListContracts()
-
+	systems, err := client.ListSystems()
 	if err != nil {
-		logger.Fatalf("Failed to list contracts: %v", err)
+		logger.Fatalf("Failed to retrieve agent details: %v", err)
 	}
 
-	for _, contract := range contracts.Data {
-		logger.Printf("Contract ID: %s\n", contract.ID)
+	for _, system := range systems.Data {
+		logger.Printf("System: %s\n", system.Symbol)
 	}
 
 }
