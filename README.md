@@ -24,6 +24,11 @@ To set up a new client for interacting with the SpaceTraders API, follow these s
 2. **Initialize the client**: Create a new instance of the SpaceTraders client by providing the base URL of the SpaceTraders API.
 
 ```go
+import(
+	"github.com/jjkirkpatrick/spacetraders-client/client"
+	"github.com/jjkirkpatrick/spacetraders-client/metrics"
+)
+
 options := client.DefaultClientOptions()
 client, cerr := client.NewClient(options, nil)
 ```
