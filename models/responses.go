@@ -222,3 +222,87 @@ type ListFactionsResponse struct {
 	Data []*Faction `json:"data"`
 	Meta Meta       `json:"meta"`
 }
+
+type ListSystemsResponse struct {
+	Symbol       string       `json:"symbol"`
+	SectorSymbol string       `json:"sectorSymbol"`
+	Type         WaypointType `json:"type"`
+	X            int          `json:"x"`
+	Y            int          `json:"y"`
+	Waypoints    []Waypoint   `json:"waypoints"`
+	Factions     []Faction    `json:"factions"`
+}
+
+type GetSystemResponse struct {
+	Data struct {
+		Symbol       string       `json:"symbol"`
+		SectorSymbol string       `json:"sectorSymbol"`
+		Type         WaypointType `json:"type"`
+		X            int          `json:"x"`
+		Y            int          `json:"y"`
+		Waypoints    []Waypoint   `json:"waypoints"`
+		Factions     []Faction    `json:"factions"`
+	} `json:"data"`
+}
+
+type ListWaypointsResponse struct {
+	Symbol              string          `json:"symbol"`
+	Type                WaypointType    `json:"type"`
+	SystemSymbol        string          `json:"systemSymbol"`
+	X                   int             `json:"x"`
+	Y                   int             `json:"y"`
+	Orbitals            []Orbital       `json:"orbitals"`
+	Orbits              string          `json:"orbits"`
+	Faction             Faction         `json:"factions"`
+	Traits              []WaypointTrait `json:"traits"`
+	Modifiers           []Modifier      `json:"modifiers"`
+	Chart               []Chart         `json:"chart"`
+	IsUnderConstruction bool            `json:"isUnderConstruction"`
+}
+
+type GetWaypointResponse struct {
+	Data struct {
+		Symbol              string          `json:"symbol"`
+		Type                WaypointType    `json:"type"`
+		SystemSymbol        string          `json:"systemSymbol"`
+		X                   int             `json:"x"`
+		Y                   int             `json:"y"`
+		Orbitals            []Orbital       `json:"orbitals"`
+		Orbits              string          `json:"orbits"`
+		Faction             Faction         `json:"factions"`
+		Traits              []WaypointTrait `json:"traits"`
+		Modifiers           []Modifier      `json:"modifiers"`
+		Chart               []Chart         `json:"chart"`
+		IsUnderConstruction bool            `json:"isUnderConstruction"`
+	} `json:"data"`
+}
+
+type GetMarketResponse struct {
+	Data struct {
+		Symbol       string             `json:"symbol"`
+		Exports      []string           `json:"exports"`
+		Imports      []string           `json:"imports"`
+		Exchange     []string           `json:"exchange"`
+		Transactions []Transaction      `json:"transactions"`
+		TradeGoods   []MarketTradeGoods `json:"tradeGoods"`
+	} `json:"data"`
+}
+
+type GetShipyardResponse struct {
+	Data Shipyard `json:"data"`
+}
+
+type GetJumpGatesResponse struct {
+	Data []JumpGate `json:"data"`
+}
+
+type GetConstructionSitesResponse struct {
+	Data []ConstructionSite `json:"data"`
+}
+
+type SupplyConstructionSiteResponse struct {
+	Data struct {
+		Construction ConstructionSite `json:"construction"`
+		Cargo        Cargo            `json:"cargo"`
+	} `json:"data"`
+}

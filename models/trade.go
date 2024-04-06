@@ -144,3 +144,40 @@ type Yield struct {
 	Symbol GoodSymbol `json:"symbol" `
 	Units  int        `json:"units" `
 }
+
+type MarketTradeGoodType string
+
+const (
+	Export   MarketTradeGoodType = "EXPORT"
+	Import   MarketTradeGoodType = "IMPORT"
+	Exchange MarketTradeGoodType = "EXCHANGE"
+)
+
+type MarketTradeSupply string
+
+const (
+	Scarse   MarketTradeSupply = "SCARSE"
+	Limited  MarketTradeSupply = "LIMITED"
+	Moderate MarketTradeSupply = "MODERATE"
+	High     MarketTradeSupply = "HIGH"
+	Abundant MarketTradeSupply = "ABUNDANT"
+)
+
+type MarketTradeAvtivity string
+
+const (
+	Weak       MarketTradeAvtivity = "WEAK"
+	Growing    MarketTradeAvtivity = "GROWING"
+	Strong     MarketTradeAvtivity = "STRONG"
+	Restricted MarketTradeAvtivity = "RESTRICTED"
+)
+
+type MarketTradeGoods struct {
+	Symbol        GoodSymbol          `json:"symbol"`
+	Type          MarketTradeGoodType `json:"type"`
+	TradeValue    int                 `json:"tradeValue"`
+	Supply        MarketTradeSupply   `json:"supply"`
+	Activity      MarketTradeAvtivity `json:"activity"`
+	PurchasePrice int                 `json:"purchasePrice"`
+	SellPrice     int                 `json:"sellPrice"`
+}

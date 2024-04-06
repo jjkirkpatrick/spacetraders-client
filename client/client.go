@@ -345,8 +345,8 @@ func (c *Client) FulfilContract(contractId string) (*models.Agent, *models.Contr
 	return agent, contract, err
 }
 
-func (c *Client) ListSystems() (*Paginator[*models.System], *models.APIError) {
-	fetchFunc := func(meta models.Meta) ([]*models.System, models.Meta, *models.APIError) {
+func (c *Client) ListSystems() (*Paginator[*models.ListSystemsResponse], *models.APIError) {
+	fetchFunc := func(meta models.Meta) ([]*models.ListSystemsResponse, models.Meta, *models.APIError) {
 		metaPtr := &meta
 		systems, metaPtr, err := api.ListSystems(c.Get, metaPtr)
 		if err != nil {
@@ -364,14 +364,15 @@ func (c *Client) ListSystems() (*Paginator[*models.System], *models.APIError) {
 			return systems, defaultMeta, nil
 		}
 	}
-	return NewPaginator[*models.System](fetchFunc), nil
+	return NewPaginator[*models.ListSystemsResponse](fetchFunc), nil
 }
 
-func (c *Client) GetSystem(systemSymbol string) (*models.System, *models.APIError) {
+func (c *Client) GetSystem(systemSymbol string) (*models.GetSystemResponse, *models.APIError) {
 	return api.GetSystem(c.Get, systemSymbol)
 }
-func (c *Client) ListWaypointsInSystem(systemSymbol string, trait models.WaypointTrait, waypointType models.WaypointType) (*Paginator[*models.Waypoint], *models.APIError) {
-	fetchFunc := func(meta models.Meta) ([]*models.Waypoint, models.Meta, *models.APIError) {
+
+func (c *Client) ListWaypointsInSystem(systemSymbol string, trait models.WaypointTrait, waypointType models.WaypointType) (*Paginator[*models.ListWaypointsResponse], *models.APIError) {
+	fetchFunc := func(meta models.Meta) ([]*models.ListWaypointsResponse, models.Meta, *models.APIError) {
 		metaPtr := &meta
 		waypoint, metaPtr, err := api.ListWaypointsInSystem(c.Get, metaPtr, systemSymbol, trait, waypointType)
 		if err != nil {
@@ -389,30 +390,30 @@ func (c *Client) ListWaypointsInSystem(systemSymbol string, trait models.Waypoin
 			return waypoint, defaultMeta, nil
 		}
 	}
-	return NewPaginator[*models.Waypoint](fetchFunc), nil
+	return NewPaginator[*models.ListWaypointsResponse](fetchFunc), nil
 }
 
-func (c *Client) GetWaypoint(systemSymbol, waypointSymbol string) (*models.Waypoint, *models.APIError) {
+func (c *Client) GetWaypoint(systemSymbol, waypointSymbol string) (*models.GetWaypointResponse, *models.APIError) {
 	return api.GetWaypoint(c.Get, systemSymbol, waypointSymbol)
 }
 
-func (c *Client) GetMarket(systemSymbol, waypointSymbol string) (*models.Market, *models.APIError) {
+func (c *Client) GetMarket(systemSymbol, waypointSymbol string) (*models.GetMarketResponse, *models.APIError) {
 	return api.GetMarket(c.Get, systemSymbol, waypointSymbol)
 }
 
-func (c *Client) GetShipyard(systemSymbol, waypointSymbol string) (*models.Shipyard, *models.APIError) {
+func (c *Client) GetShipyard(systemSymbol, waypointSymbol string) (*models.GetShipyardResponse, *models.APIError) {
 	return api.GetShipyard(c.Get, systemSymbol, waypointSymbol)
 }
 
-func (c *Client) GetJumpGate(systemSymbol, waypointSymbol string) (*models.JumpGate, *models.APIError) {
+func (c *Client) GetJumpGate(systemSymbol, waypointSymbol string) (*models.GetJumpGatesResponse, *models.APIError) {
 	return api.GetJumpGate(c.Get, systemSymbol, waypointSymbol)
 }
 
-func (c *Client) GetConstructionSite(systemSymbol, waypointSymbol string) (*models.ConstructionSite, *models.APIError) {
+func (c *Client) GetConstructionSite(systemSymbol, waypointSymbol string) (*models.GetConstructionSitesResponse, *models.APIError) {
 	return api.GetConstructionSite(c.Get, systemSymbol, waypointSymbol)
 }
 
-func (c *Client) SupplyConstructionSite(systemSymbol, waypointSymbol string, payload models.SupplyConstructionSiteRequest) (*models.ConstructionSite, *models.APIError) {
+func (c *Client) SupplyConstructionSite(systemSymbol, waypointSymbol string, payload models.SupplyConstructionSiteRequest) (*models.SupplyConstructionSiteResponse, *models.APIError) {
 	return api.SupplyConstructionSite(c.Post, systemSymbol, waypointSymbol, payload)
 }
 

@@ -21,3 +21,19 @@ type Orbital struct {
 	Symbol string `json:"symbol"`
 	Orbits string `json:"orbits,omitempty"`
 }
+
+type ModifierType string
+
+const (
+	Stripped      ModifierType = "STRIPPED"
+	Unstable      ModifierType = "UNSTABLE"
+	RadiationLeak ModifierType = "RADIATION_LEAK"
+	CriticalLimit ModifierType = "CRITICAL_LIMIT"
+	CivilUnrest   ModifierType = "CIVIL_UNREST"
+)
+
+type Modifier struct {
+	Symbol      ModifierType `json:"symbol"`
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+}
