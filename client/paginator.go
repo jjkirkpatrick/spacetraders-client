@@ -1,8 +1,6 @@
 package client
 
 import (
-	"fmt"
-
 	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
@@ -47,7 +45,6 @@ func (p *Paginator[T]) FetchPage(page int) (*Paginator[T], *models.APIError) {
 // GetNextPage fetches the next page.
 func (p *Paginator[T]) GetNextPage() (*Paginator[T], *models.APIError) {
 	p.Meta.Page++
-	fmt.Println("Getting page ", p.Meta.Page)        // Correctly increment the page number
 	newData, newMeta, err := p.fetchPageFunc(p.Meta) // Use the updated Meta
 	if err != nil {
 		return nil, err
