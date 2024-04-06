@@ -1,6 +1,8 @@
 package client
 
 import (
+	"fmt"
+
 	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
@@ -10,16 +12,18 @@ type Paginator[T any] struct {
 	Data          []T
 	Meta          models.Meta // Use value instead of pointer to simplify usage
 	fetchPageFunc func(meta models.Meta) ([]T, models.Meta, *models.APIError)
+	Error         *models.APIError
 }
 
 // NewPaginator creates a new Paginator instance with default pagination parameters.
 // fetchFunc is a function that knows how to fetch a page of data given pagination metadata.
 func NewPaginator[T any](fetchFunc func(models.Meta) ([]T, models.Meta, *models.APIError)) *Paginator[T] {
 	// Initialize with default pagination parameters, e.g., page 1 and limit 5
-	defaultMeta := models.Meta{Page: 1, Limit: 5}
+	defaultMeta := models.Meta{Page: 1, Limit: 20}
 	return &Paginator[T]{
 		Meta:          defaultMeta,
 		fetchPageFunc: fetchFunc,
+		Error:         nil,
 	}
 }
 
@@ -64,4 +68,27 @@ func (p *Paginator[T]) GetPreviousPage() (*Paginator[T], *models.APIError) {
 	p.Data = newData // Update the paginator's data with the previous page's data
 	p.Meta = newMeta // Update the paginator's meta information
 	return p, nil    // Return the same paginator instance
+}
+
+// FetchAllPages fetches all pages until no more data is available.
+func (p *Paginator[T]) FetchAllPages() ([]*Paginator[T], *models.APIError) {
+	var allPages []*Paginator[T]
+
+	currentPage, err := p.FetchFirstPage()
+	if err != nil {
+		return nil, err
+	}
+	allPages = append(allPages, currentPage)
+
+	for currentPage.Meta.Page <= currentPage.Meta.Total {
+		fmt.Println("Getting page", currentPage.Meta.Page)
+		nextPage, err := currentPage.GetNextPage()
+		if err != nil {
+			return allPages, err // Return what we have so far in case of error
+		}
+		allPages = append(allPages, nextPage)
+		currentPage = nextPage
+	}
+
+	return allPages, nil
 }
