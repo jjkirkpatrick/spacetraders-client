@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -50,16 +49,15 @@ func main() {
 		logger.Fatalf("Failed to initiate listing systems: %v", err)
 	}
 
-	contracts, err := paginator.FetchAllPages()
+	allPages, err := paginator.FetchAllPages()
 	if err != nil {
-		logger.Fatalf("Failed to list systems: %v", err.Data)
+		logger.Fatalf("Failed to fetch all pages: %v", err)
 	}
 
-	for _, pages := range contracts {
-		fmt.Printf("Page: %+v\n", pages.Meta.Page)
-		for _, contract := range pages.Data {
-			logger.Printf("Contract: %+v", contract.Symbol)
-		}
+	for _, contract := range allPages {
+		logger.Printf("Contract: %+v", contract.Symbol)
 	}
+
+	logger.Printf("Total number of items: %d", len(allPages))
 
 }

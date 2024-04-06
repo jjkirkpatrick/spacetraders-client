@@ -46,20 +46,28 @@ func GetSystem(get GetFunc, systemSymbol string) (*models.System, *models.APIErr
 	return &response.Data, nil
 }
 
+type listWaypointsResponse struct {
+	Data []*models.Waypoint `json:"data"`
+	Meta models.Meta        `json:"meta"`
+}
+
 // ListWaypointsInSystem retrieves a list of waypoints in a specific system
-func ListWaypointsInSystem(get GetFunc, systemSymbol string) ([]*models.Waypoint, *models.APIError) {
+func ListWaypointsInSystem(get GetFunc, meta *models.Meta, systemSymbol string) ([]*models.Waypoint, *models.Meta, *models.APIError) {
 	endpoint := fmt.Sprintf("/systems/%s/waypoints", systemSymbol)
 
-	var response struct {
-		Data []*models.Waypoint `json:"data"`
+	var response listWaypointsResponse
+
+	queryParams := map[string]string{
+		"page":  fmt.Sprintf("%d", meta.Page),
+		"limit": fmt.Sprintf("%d", meta.Limit),
 	}
 
-	err := get(endpoint, nil, &response)
+	err := get(endpoint, queryParams, &response)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return response.Data, nil
+	return response.Data, &response.Meta, nil
 }
 
 // GetWaypoint retrieves the details of a specific waypoint

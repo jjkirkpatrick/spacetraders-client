@@ -46,7 +46,8 @@ func (p *Paginator[T]) FetchPage(page int) (*Paginator[T], *models.APIError) {
 
 // GetNextPage fetches the next page.
 func (p *Paginator[T]) GetNextPage() (*Paginator[T], *models.APIError) {
-	p.Meta.Page++                                    // Correctly increment the page number
+	p.Meta.Page++
+	fmt.Println("Getting page ", p.Meta.Page)        // Correctly increment the page number
 	newData, newMeta, err := p.fetchPageFunc(p.Meta) // Use the updated Meta
 	if err != nil {
 		return nil, err
@@ -70,25 +71,31 @@ func (p *Paginator[T]) GetPreviousPage() (*Paginator[T], *models.APIError) {
 	return p, nil    // Return the same paginator instance
 }
 
-// FetchAllPages fetches all pages until no more data is available.
-func (p *Paginator[T]) FetchAllPages() ([]*Paginator[T], *models.APIError) {
-	var allPages []*Paginator[T]
+// FetchAllPages fetches all data at once without needing to loop over paginators.
+func (p *Paginator[T]) FetchAllPages() ([]T, *models.APIError) {
+	var allData []T
 
 	currentPage, err := p.FetchFirstPage()
 	if err != nil {
 		return nil, err
 	}
-	allPages = append(allPages, currentPage)
 
-	for currentPage.Meta.Page <= currentPage.Meta.Total {
-		fmt.Println("Getting page", currentPage.Meta.Page)
+	allData = append(allData, currentPage.Data...)
+
+	// Loop until no more data is available.
+	for len(currentPage.Data) > 0 {
 		nextPage, err := currentPage.GetNextPage()
 		if err != nil {
-			return allPages, err // Return what we have so far in case of error
+			// If an error occurs, stop fetching and return what we have so far along with the error.
+			return allData, err
 		}
-		allPages = append(allPages, nextPage)
+		// Check if nextPage is empty, indicating no more pages.
+		if len(nextPage.Data) == 0 {
+			break
+		}
+		allData = append(allData, nextPage.Data...)
 		currentPage = nextPage
 	}
 
-	return allPages, nil
+	return allData, nil
 }

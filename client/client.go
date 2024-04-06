@@ -284,28 +284,46 @@ func (c *Client) GetPublicAgent(agentSymbol string) (*models.Agent, *models.APIE
 
 func (c *Client) ListAgents() (*Paginator[*models.Agent], *models.APIError) {
 	fetchFunc := func(meta models.Meta) ([]*models.Agent, models.Meta, *models.APIError) {
-		// Since api.ListAgents expects a pointer to models.Meta, create a pointer from the value.
 		metaPtr := &meta
-		// Call api.ListAgents with a pointer to meta.
 		agents, metaPtr, err := api.ListAgents(c.Get, metaPtr)
-		// Dereference metaPtr when returning to match the expected return types.
-		return agents, *metaPtr, err
+		if err != nil {
+			if metaPtr == nil {
+				// Use default Meta values or handle accordingly
+				defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+				metaPtr = &defaultMeta
+			}
+			return agents, *metaPtr, err
+		}
+		if metaPtr != nil {
+			return agents, *metaPtr, nil
+		} else {
+			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+			return agents, defaultMeta, nil
+		}
 	}
-	// Initialize the paginator with the fetch function.
-	return NewPaginator[*models.Agent](fetchFunc).FetchFirstPage()
+	return NewPaginator[*models.Agent](fetchFunc), nil
 }
 
 func (c *Client) ListContracts() (*Paginator[*models.Contract], *models.APIError) {
 	fetchFunc := func(meta models.Meta) ([]*models.Contract, models.Meta, *models.APIError) {
-		// Since api.ListAgents expects a pointer to models.Meta, create a pointer from the value.
 		metaPtr := &meta
-		// Call api.ListAgents with a pointer to meta.
-		agents, metaPtr, err := api.ListContracts(c.Get, metaPtr)
-		// Dereference metaPtr when returning to match the expected return types.
-		return agents, *metaPtr, err
+		contracts, metaPtr, err := api.ListContracts(c.Get, metaPtr)
+		if err != nil {
+			if metaPtr == nil {
+				// Use default Meta values or handle accordingly
+				defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+				metaPtr = &defaultMeta
+			}
+			return contracts, *metaPtr, err
+		}
+		if metaPtr != nil {
+			return contracts, *metaPtr, nil
+		} else {
+			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+			return contracts, defaultMeta, nil
+		}
 	}
-	// Initialize the paginator with the fetch function.
-	return NewPaginator[*models.Contract](fetchFunc).FetchFirstPage()
+	return NewPaginator[*models.Contract](fetchFunc), nil
 }
 
 func (c *Client) GetContract(contractId string) (*models.Contract, *models.APIError) {
@@ -329,23 +347,16 @@ func (c *Client) FulfilContract(contractId string) (*models.Agent, *models.Contr
 
 func (c *Client) ListSystems() (*Paginator[*models.System], *models.APIError) {
 	fetchFunc := func(meta models.Meta) ([]*models.System, models.Meta, *models.APIError) {
-		// Since api.ListSystems expects a pointer to models.Meta, create a pointer from the value.
 		metaPtr := &meta
-		// Call api.ListSystems with a pointer to meta.
 		systems, metaPtr, err := api.ListSystems(c.Get, metaPtr)
-
-		// Check for error and handle nil metaPtr
 		if err != nil {
 			if metaPtr == nil {
 				// Use default Meta values or handle accordingly
 				defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
 				metaPtr = &defaultMeta
 			}
-			// Return the systems with the metaPtr (which now points to either the original or default Meta) and the error
 			return systems, *metaPtr, err
 		}
-
-		// If no error and metaPtr is not nil, dereference metaPtr safely
 		if metaPtr != nil {
 			return systems, *metaPtr, nil
 		} else {
@@ -353,14 +364,32 @@ func (c *Client) ListSystems() (*Paginator[*models.System], *models.APIError) {
 			return systems, defaultMeta, nil
 		}
 	}
-	// Initialize the paginator with the fetch function.
 	return NewPaginator[*models.System](fetchFunc), nil
 }
+
 func (c *Client) GetSystem(systemSymbol string) (*models.System, *models.APIError) {
 	return api.GetSystem(c.Get, systemSymbol)
 }
-func (c *Client) ListWaypointsInSystem(systemSymbol string) ([]*models.Waypoint, *models.APIError) {
-	return api.ListWaypointsInSystem(c.Get, systemSymbol)
+func (c *Client) ListWaypointsInSystem(systemSymbol string) (*Paginator[*models.Waypoint], *models.APIError) {
+	fetchFunc := func(meta models.Meta) ([]*models.Waypoint, models.Meta, *models.APIError) {
+		metaPtr := &meta
+		waypoint, metaPtr, err := api.ListWaypointsInSystem(c.Get, metaPtr, systemSymbol)
+		if err != nil {
+			if metaPtr == nil {
+				// Use default Meta values or handle accordingly
+				defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+				metaPtr = &defaultMeta
+			}
+			return waypoint, *metaPtr, err
+		}
+		if metaPtr != nil {
+			return waypoint, *metaPtr, nil
+		} else {
+			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+			return waypoint, defaultMeta, nil
+		}
+	}
+	return NewPaginator[*models.Waypoint](fetchFunc), nil
 }
 
 func (c *Client) GetWaypoint(systemSymbol, waypointSymbol string) (*models.Waypoint, *models.APIError) {
