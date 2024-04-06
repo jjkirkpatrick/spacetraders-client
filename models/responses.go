@@ -212,3 +212,13 @@ type ShipRefineResponse struct {
 		} `json:"consumed"`
 	} `json:"data"`
 }
+
+type ListShipsResponse struct {
+	Data []*Ship `json:"data"`
+	Meta Meta    `json:"meta"`
+}
+
+type ListFactionsResponse struct {
+	Data []*Faction `json:"data"`
+	Meta Meta       `json:"meta"`
+}

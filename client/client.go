@@ -418,8 +418,26 @@ func (c *Client) SupplyConstructionSite(systemSymbol, waypointSymbol string, pay
 
 // Functions from fleet.go
 
-func (c *Client) ListShips() ([]*models.Ship, *models.APIError) {
-	return api.ListShips(c.Get)
+func (c *Client) ListShips(systemSymbol string) (*Paginator[*models.Ship], *models.APIError) {
+	fetchFunc := func(meta models.Meta) ([]*models.Ship, models.Meta, *models.APIError) {
+		metaPtr := &meta
+		ships, metaPtr, err := api.ListShips(c.Get, metaPtr)
+		if err != nil {
+			if metaPtr == nil {
+				// Use default Meta values or handle accordingly
+				defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+				metaPtr = &defaultMeta
+			}
+			return ships, *metaPtr, err
+		}
+		if metaPtr != nil {
+			return ships, *metaPtr, nil
+		} else {
+			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+			return ships, defaultMeta, nil
+		}
+	}
+	return NewPaginator[*models.Ship](fetchFunc), nil
 }
 
 func (c *Client) PurchaseShip(payload *models.PurchaseShipRequest) (*models.PurchaseShipResponse, *models.APIError) {
@@ -552,4 +570,40 @@ func (c *Client) GetRepairShip(ShipSymbol string) (*models.GetRepairShipResponse
 
 func (c *Client) RepairShip(ShipSymbol string) (*models.RepairShipResponse, *models.APIError) {
 	return api.RepairShip(c.Post, ShipSymbol)
+}
+
+// Functions from factions.go
+
+// GetFaction retrieves the faction's details
+// API Docs: https://spacetraders.stoplight.io/docs/spacetraders/a50decd0f9483-get-faction
+func (c *Client) GetFaction(factionSymbol string) (*models.Faction, *models.APIError) {
+	faction, err := api.GetFaction(c.Get, factionSymbol)
+	if err != nil {
+		return nil, &models.APIError{Message: err.Error()}
+	}
+	return faction, nil
+}
+
+// ListFactions retrieves a list of factions with pagination
+// API Docs: https://spacetraders.stoplight.io/docs/spacetraders/93c5d5e6ad5b0-list-factions
+func (c *Client) ListFactions() (*Paginator[*models.Faction], *models.APIError) {
+	fetchFunc := func(meta models.Meta) ([]*models.Faction, models.Meta, *models.APIError) {
+		metaPtr := &meta
+		factions, metaPtr, err := api.ListFactions(c.Get, metaPtr)
+		if err != nil {
+			if metaPtr == nil {
+				// Use default Meta values or handle accordingly
+				defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+				metaPtr = &defaultMeta
+			}
+			return factions, *metaPtr, err
+		}
+		if metaPtr != nil {
+			return factions, *metaPtr, nil
+		} else {
+			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+			return factions, defaultMeta, nil
+		}
+	}
+	return NewPaginator[*models.Faction](fetchFunc), nil
 }

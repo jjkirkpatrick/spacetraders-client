@@ -6,20 +6,22 @@ import (
 	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
-// ListShips retrieves a list of the user's models.Ships
-func ListShips(get GetFunc) ([]*models.Ship, *models.APIError) {
-	endpoint := "/my/models.Ships"
+func ListShips(get GetFunc, meta *models.Meta) ([]*models.Ship, *models.Meta, *models.APIError) {
+	endpoint := "/my/ships"
 
-	var response struct {
-		Data []*models.Ship `json:"data"`
+	var response models.ListShipsResponse
+
+	queryParams := map[string]string{
+		"page":  fmt.Sprintf("%d", meta.Page),
+		"limit": fmt.Sprintf("%d", meta.Limit),
 	}
 
-	err := get(endpoint, nil, &response)
+	err := get(endpoint, queryParams, &response)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return response.Data, nil
+	return response.Data, &response.Meta, nil
 }
 
 // PurchaseShip allows the user to purchase a new models.Ship

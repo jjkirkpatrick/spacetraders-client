@@ -44,9 +44,25 @@ func main() {
 
 	client.WriteMetric(metric)
 
-	paginator, err := client.ListSystems()
+	//paginator, err := client.ListSystems()
+	//if err != nil {
+	//	logger.Fatalf("Failed to initiate listing systems: %v", err)
+	//}
+	//
+	//allPages, err := paginator.FetchAllPages()
+	//if err != nil {
+	//	logger.Fatalf("Failed to fetch all pages: %v", err)
+	//}
+	//
+	//for _, contract := range allPages {
+	//	logger.Printf("Contract: %+v", contract.Symbol)
+	//}
+	//
+	//logger.Printf("Total number of items: %d", len(allPages))
+
+	paginator, err := client.ListFactions()
 	if err != nil {
-		logger.Fatalf("Failed to initiate listing systems: %v", err)
+		logger.Fatalf("Failed to initiate listing factions: %v", err)
 	}
 
 	allPages, err := paginator.FetchAllPages()
@@ -54,10 +70,8 @@ func main() {
 		logger.Fatalf("Failed to fetch all pages: %v", err)
 	}
 
-	for _, contract := range allPages {
-		logger.Printf("Contract: %+v", contract.Symbol)
+	for _, faction := range allPages {
+		logger.Printf("Faction: %+v", faction.Symbol)
 	}
-
-	logger.Printf("Total number of items: %d", len(allPages))
 
 }

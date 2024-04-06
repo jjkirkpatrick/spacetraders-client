@@ -21,20 +21,26 @@ func GetFaction(get GetFunc, factionSymbol string) (*models.Faction, error) {
 	return &response.Data, nil
 }
 
-type listFactionsResponse struct {
+type ListFactionsResponse struct {
 	Data []*models.Faction `json:"data"`
 	Meta models.Meta       `json:"meta"`
 }
 
-func ListFactions(get GetFunc, limit, page int) ([]*models.Faction, error) {
-	endpoint := fmt.Sprintf("/factions/f?limit=%d&page=%d", limit, page)
+// ListAgents retrieves a list of agents with pagination
+func ListFactions(get GetFunc, meta *models.Meta) ([]*models.Faction, *models.Meta, *models.APIError) {
+	endpoint := "/factions"
 
-	var response listFactionsResponse
+	var response models.ListFactionsResponse
 
-	err := get(endpoint, nil, &response)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list agents: %v", err)
+	queryParams := map[string]string{
+		"page":  fmt.Sprintf("%d", meta.Page),
+		"limit": fmt.Sprintf("%d", meta.Limit),
 	}
 
-	return response.Data, nil
+	err := get(endpoint, queryParams, &response)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return response.Data, &response.Meta, nil
 }
