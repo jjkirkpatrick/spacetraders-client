@@ -11,7 +11,7 @@ type GetFunc func(endpoint string, queryParams map[string]string, result interfa
 type PostFunc func(endpoint string, payload interface{}, queryParams map[string]string, result interface{}) *models.APIError
 type PutFunc func(endpoint string, payload interface{}, queryParams map[string]string, result interface{}) *models.APIError
 type DeleteFunc func(endpoint string) *models.APIError
-type PatchFunc func(endpoint string, payload interface{}, result interface{}) *models.APIError
+type PatchFunc func(endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError
 
 // GetAgent retrieves the agent's details
 func GetAgent(get GetFunc) (*models.Agent, *models.APIError) {

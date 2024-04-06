@@ -1,5 +1,18 @@
 package models
 
+type PurchaseShipRequest struct {
+	Shiptype       ShipType `json:"shipType"`
+	WaypointSymbol string   `json:"waypointSymbol"`
+}
+
+type OrbitRequest struct {
+	ShipSymbol string `json:"shipSymbol"`
+}
+
+type RefineRequest struct {
+	Produce string `json:"produce"`
+}
+
 // Ship represents the ship details
 type Ship struct {
 	Symbol       string           `json:"symbol"`
@@ -156,3 +169,67 @@ type ShipRequirements struct {
 	Crew  int `json:"crew"`
 	Slots int `json:"slots"`
 }
+
+type Survey struct {
+	Signature  string    `json:"signature" `
+	Symbol     string    `json:"symbol" `
+	Deposits   []Deposit `json:"deposits" `
+	Expiration string    `json:"expiration"  format:"date-time"`
+	Size       string    `json:"size" `
+}
+
+type Deposit struct {
+	Symbol     string `json:"symbol" `
+	Expiration string `json:"expiration"  format:"date-time"`
+	Size       string `json:"size" `
+}
+
+// FuelDetails represents the details of the ship's fuel tanks
+type FuelDetails struct {
+	Current  int           `json:"current" `
+	Capacity int           `json:"capacity" `
+	Consumed *FuelConsumed `json:"consumed,omitempty"`
+}
+
+// FuelConsumed represents the fuel consumption data
+type FuelConsumed struct {
+	Amount    int    `json:"amount" `
+	Timestamp string `json:"timestamp"  format:"date-time"`
+}
+
+type FlightMode string
+
+const (
+	FlightModeDrift   FlightMode = "DRIFT"
+	FlightNodeStealth FlightMode = "STEALTH"
+	FlightModeCruise  FlightMode = "CRUISE"
+	FlightModeBurn    FlightMode = "BURN"
+)
+
+type NavStatus string
+
+const (
+	NavStatusDocked    NavStatus = "DOCKED"
+	NavStatusInOrbit   NavStatus = "IN_ORBIT"
+	NavStatusInTransit NavStatus = "IN_TRANSIT"
+)
+
+type MountSymbol string
+
+const (
+	MountGasSiphonI       MountSymbol = "MOUNT_GAS_SIPHON_I"
+	MountGasSiphonII      MountSymbol = "MOUNT_GAS_SIPHON_II"
+	MountGasSiphonIII     MountSymbol = "MOUNT_GAS_SIPHON_III"
+	MountSurveyorI        MountSymbol = "MOUNT_SURVEYOR_I"
+	MountSurveyorII       MountSymbol = "MOUNT_SURVEYOR_II"
+	MountSurveyorIII      MountSymbol = "MOUNT_SURVEYOR_III"
+	MountSensorArrayI     MountSymbol = "MOUNT_SENSOR_ARRAY_I"
+	MountSensorArrayII    MountSymbol = "MOUNT_SENSOR_ARRAY_II"
+	MountSensorArrayIII   MountSymbol = "MOUNT_SENSOR_ARRAY_III"
+	MountMiningLaserI     MountSymbol = "MOUNT_MINING_LASER_I"
+	MountMiningLaserII    MountSymbol = "MOUNT_MINING_LASER_II"
+	MountMiningLaserIII   MountSymbol = "MOUNT_MINING_LASER_III"
+	MountLaserCannonI     MountSymbol = "MOUNT_LASER_CANNON_I"
+	MountMissileLauncherI MountSymbol = "MOUNT_MISSILE_LAUNCHER_I"
+	MountTurretI          MountSymbol = "MOUNT_TURRET_I"
+)

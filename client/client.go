@@ -415,3 +415,141 @@ func (c *Client) GetConstructionSite(systemSymbol, waypointSymbol string) (*mode
 func (c *Client) SupplyConstructionSite(systemSymbol, waypointSymbol string, payload models.SupplyConstructionSiteRequest) (*models.ConstructionSite, *models.APIError) {
 	return api.SupplyConstructionSite(c.Post, systemSymbol, waypointSymbol, payload)
 }
+
+// Functions from fleet.go
+
+func (c *Client) ListShips() ([]*models.Ship, *models.APIError) {
+	return api.ListShips(c.Get)
+}
+
+func (c *Client) PurchaseShip(payload *models.PurchaseShipRequest) (*models.PurchaseShipResponse, *models.APIError) {
+	return api.PurchaseShip(c.Post, payload)
+}
+
+func (c *Client) GetShip(ShipSymbol string) (*models.Ship, *models.APIError) {
+	return api.GetShip(c.Get, ShipSymbol)
+}
+
+func (c *Client) GetShipCargo(ShipSymbol string) (*models.Cargo, *models.APIError) {
+	return api.GetShipCargo(c.Get, ShipSymbol)
+}
+
+func (c *Client) OrbitShip(ShipSymbol string, payload *models.OrbitRequest) (*models.ShipNav, *models.APIError) {
+	return api.OrbitShip(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) ShipRefine(ShipSymbol string, payload *models.RefineRequest) (*models.ShipRefineResponse, *models.APIError) {
+	return api.ShipRefine(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) CreateChart(ShipSymbol string) (*models.CreateChartResponse, *models.APIError) {
+	return api.CreateChart(c.Post, ShipSymbol)
+}
+
+func (c *Client) GetShipCooldown(ShipSymbol string) (*models.ShipCooldown, *models.APIError) {
+	return api.GetShipCooldown(c.Get, ShipSymbol)
+}
+
+func (c *Client) DockShip(ShipSymbol string) (*models.ShipNav, *models.APIError) {
+	return api.DockShip(c.Post, ShipSymbol)
+}
+
+func (c *Client) CreateSurvey(ShipSymbol string) (*models.CreateSurveyResponse, *models.APIError) {
+	return api.CreateSurvey(c.Post, ShipSymbol)
+}
+
+func (c *Client) ExtractResources(ShipSymbol string, payload *models.Survey) (*models.ExtractionResponse, *models.APIError) {
+	return api.ExtractResources(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) SiphonResources(ShipSymbol string) (*models.SiphonResponse, *models.APIError) {
+	return api.SiphonResources(c.Post, ShipSymbol)
+}
+
+func (c *Client) ExtractResourcesWithSurvey(ShipSymbol string, payload *models.ExtractWithSurveyRequest) (*models.ExtractionResponse, *models.APIError) {
+	return api.ExtractResourcesWithSurvey(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) JettisonCargo(ShipSymbol string, payload *models.JettisonRequest) (*models.JettisonResponse, *models.APIError) {
+	return api.JettisonCargo(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) JumpShip(ShipSymbol string, payload *models.JumpShipRequest) (*models.JumpShipResponse, *models.APIError) {
+	return api.JumpShip(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) NavigateShip(ShipSymbol string, payload *models.NavigateRequest) (*models.NavigateResponse, *models.APIError) {
+	return api.NavigateShip(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) PatchShipNav(ShipSymbol string, payload *models.NavUpdateRequest) (*models.PatchShipNacResponse, *models.APIError) {
+	return api.PatchShipNav(c.Patch, ShipSymbol, payload)
+}
+
+func (c *Client) GetShipNav(ShipSymbol string) (*models.ShipNav, *models.APIError) {
+	return api.GetShipNav(c.Get, ShipSymbol)
+}
+
+func (c *Client) WarpShip(ShipSymbol string, payload *models.WarpRequest) (*models.WarpResponse, *models.APIError) {
+	return api.WarpShip(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) SellCargo(ShipSymbol string, payload *models.SellCargoRequest) (*models.SellCargoResponse, *models.APIError) {
+	return api.SellCargo(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) ScanSystems(ShipSymbol string) (*models.ScanSystemsResponse, *models.APIError) {
+	return api.ScanSystems(c.Post, ShipSymbol)
+}
+
+func (c *Client) ScanWaypoints(ShipSymbol string) (*models.ScanWaypointsResponse, *models.APIError) {
+	return api.ScanWaypoints(c.Post, ShipSymbol)
+}
+
+func (c *Client) ScanShips(ShipSymbol string) (*models.ScanShipsResponse, *models.APIError) {
+	return api.ScanShips(c.Post, ShipSymbol)
+}
+
+func (c *Client) RefuelShip(ShipSymbol string, payload *models.RefuelShipRequest) (*models.RefuelShipResponse, *models.APIError) {
+	return api.RefuelShip(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) PurchaseCargo(ShipSymbol string, payload *models.PurchaseCargoRequest) (*models.PurchaseCargoResponse, *models.APIError) {
+	return api.PurchaseCargo(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) TransferCargo(ShipSymbol string, payload *models.TransferCargoRequest) (*models.TransferCargoResponse, *models.APIError) {
+	return api.TransferCargo(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) NegotiateContract(ShipSymbol string) (*models.NegotiateContractResponse, *models.APIError) {
+	return api.NegotiateContract(c.Post, ShipSymbol)
+}
+
+func (c *Client) GetMounts(ShipSymbol string) (*models.GetMountsResponse, *models.APIError) {
+	return api.GetMounts(c.Get, ShipSymbol)
+}
+
+func (c *Client) InstallMount(ShipSymbol string, payload *models.InstallMountRequest) (*models.InstallMountResponse, *models.APIError) {
+	return api.InstallMount(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) RemoveMount(ShipSymbol string, payload *models.RemoveMountRequest) (*models.RemoveMountResponse, *models.APIError) {
+	return api.RemoveMount(c.Post, ShipSymbol, payload)
+}
+
+func (c *Client) GetScrapShip(ShipSymbol string) (*models.GetScrapShipResponse, *models.APIError) {
+	return api.GetScrapShip(c.Get, ShipSymbol)
+}
+
+func (c *Client) ScrapShip(ShipSymbol string) (*models.ScrapShipResponse, *models.APIError) {
+	return api.ScrapShip(c.Post, ShipSymbol)
+}
+
+func (c *Client) GetRepairShip(ShipSymbol string) (*models.GetRepairShipResponse, *models.APIError) {
+	return api.GetRepairShip(c.Get, ShipSymbol)
+}
+
+func (c *Client) RepairShip(ShipSymbol string) (*models.RepairShipResponse, *models.APIError) {
+	return api.RepairShip(c.Post, ShipSymbol)
+}
