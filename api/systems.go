@@ -52,7 +52,7 @@ type listWaypointsResponse struct {
 }
 
 // ListWaypointsInSystem retrieves a list of waypoints in a specific system
-func ListWaypointsInSystem(get GetFunc, meta *models.Meta, systemSymbol string) ([]*models.Waypoint, *models.Meta, *models.APIError) {
+func ListWaypointsInSystem(get GetFunc, meta *models.Meta, systemSymbol string, trait models.WaypointTrait, waypointType models.WaypointType) ([]*models.Waypoint, *models.Meta, *models.APIError) {
 	endpoint := fmt.Sprintf("/systems/%s/waypoints", systemSymbol)
 
 	var response listWaypointsResponse
@@ -60,6 +60,13 @@ func ListWaypointsInSystem(get GetFunc, meta *models.Meta, systemSymbol string) 
 	queryParams := map[string]string{
 		"page":  fmt.Sprintf("%d", meta.Page),
 		"limit": fmt.Sprintf("%d", meta.Limit),
+	}
+	if trait != "" {
+		queryParams["trait"] = string(trait)
+	}
+
+	if waypointType != "" {
+		queryParams["type"] = string(waypointType)
 	}
 
 	err := get(endpoint, queryParams, &response)
