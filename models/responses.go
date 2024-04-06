@@ -254,9 +254,9 @@ type ListWaypointsResponse struct {
 	Orbitals            []Orbital       `json:"orbitals"`
 	Orbits              string          `json:"orbits"`
 	Faction             Faction         `json:"factions"`
-	Traits              []WaypointTrait `json:"traits"`
+	Traits              []WaypoinTraits `json:"traits"`
 	Modifiers           []Modifier      `json:"modifiers"`
-	Chart               []Chart         `json:"chart"`
+	Chart               Chart           `json:"chart"`
 	IsUnderConstruction bool            `json:"isUnderConstruction"`
 }
 

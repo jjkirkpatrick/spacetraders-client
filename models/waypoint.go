@@ -98,3 +98,9 @@ const (
 	TraitHollowedInterior      WaypointTrait = "HOLLOWED_INTERIOR"
 	TraitStripped              WaypointTrait = "STRIPPED"
 )
+
+type WaypoinTraits struct {
+	Symbol      WaypointTrait `json:"symbol"`
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+}

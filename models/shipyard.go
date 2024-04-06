@@ -18,84 +18,86 @@ const (
 )
 
 type Shipyard struct {
-	Symbol        string        `json:"symbol" required:"true"`
-	ShipTypes     []ShipType    `json:"shipTypes" required:"true"`
+	Symbol    string `json:"symbol" `
+	ShipTypes []struct {
+		Type ShipType `json:"type" `
+	} `json:"shipTypes" `
 	Transactions  []Transaction `json:"transactions"`
 	Ships         []Ship        `json:"ships"`
 	Modifications int           `json:"monificationFee"`
 }
 
 type Transaction struct {
-	WaypointSymbol string   `json:"waypointSymbol" required:"true"`
-	ShipSymbol     string   `json:"shipSymbol" required:"true" deprecated:"true"`
-	ShipType       ShipType `json:"shipType" required:"true"`
-	Price          int      `json:"price" required:"true"`
-	AgentSymbol    string   `json:"agentSymbol" required:"true"`
-	Timestamp      string   `json:"timestamp" required:"true" format:"date-time"`
+	WaypointSymbol string   `json:"waypointSymbol" `
+	ShipSymbol     string   `json:"shipSymbol"  deprecated:"true"`
+	ShipType       ShipType `json:"shipType" `
+	Price          int      `json:"price" `
+	AgentSymbol    string   `json:"agentSymbol" `
+	Timestamp      string   `json:"timestamp"  format:"date-time"`
 }
 
 type ShipyardShip struct {
-	Type             ShipType `json:"type" required:"true"`
-	Name             string   `json:"name" required:"true"`
-	Description      string   `json:"description" required:"true"`
-	Supply           string   `json:"supply" required:"true"`
+	Type             ShipType `json:"type" `
+	Name             string   `json:"name" `
+	Description      string   `json:"description" `
+	Supply           string   `json:"supply" `
 	Activity         string   `json:"activity"`
-	PurchasePrice    int      `json:"purchasePrice" required:"true"`
-	Frame            Frame    `json:"frame" required:"true"`
-	Reactor          Reactor  `json:"reactor" required:"true"`
-	Engine           Engine   `json:"engine" required:"true"`
-	Modules          []Module `json:"modules" required:"true"`
-	Mounts           []Mount  `json:"mounts" required:"true"`
-	Crew             Crew     `json:"crew" required:"true"`
-	ModificationsFee int      `json:"modificationsFee" required:"true"`
+	PurchasePrice    int      `json:"purchasePrice" `
+	Frame            Frame    `json:"frame" `
+	Reactor          Reactor  `json:"reactor" `
+	Engine           Engine   `json:"engine" `
+	Modules          []Module `json:"modules" `
+	Mounts           []Mount  `json:"mounts" `
+	Crew             Crew     `json:"crew" `
+	ModificationsFee int      `json:"modificationsFee" `
 }
 
 type Frame struct {
-	Symbol         string  `json:"symbol" required:"true"`
-	Name           string  `json:"name" required:"true"`
-	Description    string  `json:"description" required:"true"`
-	Condition      float64 `json:"condition" required:"true"`
-	Integrity      float64 `json:"integrity" required:"true"`
-	ModuleSlots    int     `json:"moduleSlots" required:"true"`
-	MountingPoints int     `json:"mountingPoints" required:"true"`
-	FuelCapacity   int     `json:"fuelCapacity" required:"true"`
+	Symbol         string  `json:"symbol" `
+	Name           string  `json:"name" `
+	Description    string  `json:"description" `
+	Condition      float64 `json:"condition" `
+	Integrity      float64 `json:"integrity" `
+	ModuleSlots    int     `json:"moduleSlots" `
+	MountingPoints int     `json:"mountingPoints" `
+	FuelCapacity   int     `json:"fuelCapacity" `
 }
 
 type Reactor struct {
-	Symbol      string  `json:"symbol" required:"true"`
-	Name        string  `json:"name" required:"true"`
-	Description string  `json:"description" required:"true"`
-	Condition   float64 `json:"condition" required:"true"`
-	Integrity   float64 `json:"integrity" required:"true"`
-	PowerOutput int     `json:"powerOutput" required:"true"`
+	Symbol      string  `json:"symbol" `
+	Name        string  `json:"name" `
+	Description string  `json:"description" `
+	Condition   float64 `json:"condition" `
+	Integrity   float64 `json:"integrity" `
+	PowerOutput int     `json:"powerOutput" `
 }
 
 type Engine struct {
-	Symbol      string  `json:"symbol" required:"true"`
-	Name        string  `json:"name" required:"true"`
-	Description string  `json:"description" required:"true"`
-	Condition   float64 `json:"condition" required:"true"`
-	Integrity   float64 `json:"integrity" required:"true"`
-	Speed       int     `json:"speed" required:"true"`
+	Symbol      string  `json:"symbol" `
+	Name        string  `json:"name" `
+	Description string  `json:"description" `
+	Condition   float64 `json:"condition" `
+	Integrity   float64 `json:"integrity" `
+	Speed       int     `json:"speed" `
 }
 
 type Module struct {
-	Symbol      string `json:"symbol" required:"true"`
-	Capacity    int    `json:"capacity" required:"true"`
-	Range       int    `json:"range" required:"true"`
-	Name        string `json:"name" required:"true"`
-	Description string `json:"description" required:"true"`
+	Symbol      string `json:"symbol" `
+	Capacity    int    `json:"capacity" `
+	Range       int    `json:"range" `
+	Name        string `json:"name" `
+	Description string `json:"description" `
 }
 
 type Mount struct {
-	Symbol      string   `json:"symbol" required:"true"`
-	Name        string   `json:"name" required:"true"`
+	Symbol      string   `json:"symbol" `
+	Name        string   `json:"name" `
 	Description string   `json:"description"`
-	Strength    int      `json:"strength" required:"true"`
+	Strength    int      `json:"strength" `
 	Deposits    []string `json:"deposits"`
 }
 
 type Crew struct {
-	Required int `json:"required" required:"true"`
-	Capacity int `json:"capacity" required:"true"`
+	Required int `json:"required" `
+	Capacity int `json:"capacity" `
 }

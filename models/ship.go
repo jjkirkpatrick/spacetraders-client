@@ -1,7 +1,7 @@
 package models
 
 type PurchaseShipRequest struct {
-	Shiptype       ShipType `json:"shipType"`
+	ShipType       ShipType `json:"shipType"`
 	WaypointSymbol string   `json:"waypointSymbol"`
 }
 

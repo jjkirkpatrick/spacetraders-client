@@ -56,7 +56,7 @@ func ListWaypointsInSystem(get GetFunc, meta *models.Meta, systemSymbol string, 
 		"limit": fmt.Sprintf("%d", meta.Limit),
 	}
 	if trait != "" {
-		queryParams["trait"] = string(trait)
+		queryParams["traits"] = string(trait)
 	}
 
 	if waypointType != "" {
