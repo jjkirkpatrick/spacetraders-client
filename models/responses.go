@@ -270,9 +270,9 @@ type GetWaypointResponse struct {
 		Orbitals            []Orbital       `json:"orbitals"`
 		Orbits              string          `json:"orbits"`
 		Faction             Faction         `json:"factions"`
-		Traits              []WaypointTrait `json:"traits"`
+		Traits              []WaypoinTraits `json:"traits"`
 		Modifiers           []Modifier      `json:"modifiers"`
-		Chart               []Chart         `json:"chart"`
+		Chart               Chart           `json:"chart"`
 		IsUnderConstruction bool            `json:"isUnderConstruction"`
 	} `json:"data"`
 }
@@ -280,9 +280,9 @@ type GetWaypointResponse struct {
 type GetMarketResponse struct {
 	Data struct {
 		Symbol       string             `json:"symbol"`
-		Exports      []string           `json:"exports"`
-		Imports      []string           `json:"imports"`
-		Exchange     []string           `json:"exchange"`
+		Exports      []Good             `json:"exports"`
+		Imports      []Good             `json:"imports"`
+		Exchange     []Good             `json:"exchange"`
 		Transactions []Transaction      `json:"transactions"`
 		TradeGoods   []MarketTradeGoods `json:"tradeGoods"`
 	} `json:"data"`

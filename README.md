@@ -3,6 +3,8 @@
 
 This document provides a basic overview of how to use the SpaceTraders API client in your Go projects.
 
+Warning - This is a work in progress, not all endpoints have been tested, there willl be bugs and missing features and the api will change over time
+
 ## Installation
 
 To use the SpaceTraders API client, you first need to install the package in your project. Run the following command:

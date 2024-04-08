@@ -154,3 +154,42 @@ func SupplyConstructionSite(post PostFunc, systemSymbol, waypointSymbol string, 
 
 	return &response, nil
 }
+
+func FindMarketsForGood(get GetFunc, systemSymbol string, goodSymbol string) ([]*models.Market, *models.APIError) {
+	var allWaypoints []*models.ListWaypointsResponse
+	meta := &models.Meta{Page: 1, Limit: 20}
+	for {
+		waypoints, metaPtr, err := ListWaypointsInSystem(get, meta, systemSymbol, models.TraitMarketplace, "")
+		if err != nil {
+			return nil, err
+		}
+		allWaypoints = append(allWaypoints, waypoints...)
+		if metaPtr.Page*metaPtr.Limit >= metaPtr.Total {
+			break
+		}
+		meta.Page++
+	}
+
+	var marketsBuyingGood []*models.Market
+
+	for _, waypoint := range allWaypoints {
+		market, err := GetMarket(get, systemSymbol, waypoint.Symbol)
+		if err != nil {
+			continue // Skip waypoints where we can't get market data
+		}
+
+		for _, good := range market.Data.Imports {
+			if good.Symbol == models.GoodSymbol(goodSymbol) {
+				marketsBuyingGood = append(marketsBuyingGood, &models.Market{
+					Symbol:   waypoint.Symbol,
+					Exports:  market.Data.Exports,
+					Imports:  market.Data.Imports,
+					Exchange: market.Data.Exchange,
+				})
+				break // Found the good, no need to check other imports
+			}
+		}
+	}
+
+	return marketsBuyingGood, nil
+}

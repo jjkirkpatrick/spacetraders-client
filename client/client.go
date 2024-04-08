@@ -417,6 +417,10 @@ func (c *Client) SupplyConstructionSite(systemSymbol, waypointSymbol string, pay
 	return api.SupplyConstructionSite(c.Post, systemSymbol, waypointSymbol, payload)
 }
 
+func (c *Client) FindMarketsForGood(systemSymbol string, goodSymbol string) ([]*models.Market, *models.APIError) {
+	return api.FindMarketsForGood(c.Get, systemSymbol, goodSymbol)
+}
+
 // Functions from fleet.go
 
 func (c *Client) ListShips(systemSymbol string) (*Paginator[*models.Ship], *models.APIError) {
@@ -453,8 +457,8 @@ func (c *Client) GetShipCargo(ShipSymbol string) (*models.Cargo, *models.APIErro
 	return api.GetShipCargo(c.Get, ShipSymbol)
 }
 
-func (c *Client) OrbitShip(ShipSymbol string, payload *models.OrbitRequest) (*models.ShipNav, *models.APIError) {
-	return api.OrbitShip(c.Post, ShipSymbol, payload)
+func (c *Client) OrbitShip(ShipSymbol string) (*models.ShipNav, *models.APIError) {
+	return api.OrbitShip(c.Post, ShipSymbol)
 }
 
 func (c *Client) ShipRefine(ShipSymbol string, payload *models.RefineRequest) (*models.ShipRefineResponse, *models.APIError) {
@@ -477,8 +481,8 @@ func (c *Client) CreateSurvey(ShipSymbol string) (*models.CreateSurveyResponse, 
 	return api.CreateSurvey(c.Post, ShipSymbol)
 }
 
-func (c *Client) ExtractResources(ShipSymbol string, payload *models.Survey) (*models.ExtractionResponse, *models.APIError) {
-	return api.ExtractResources(c.Post, ShipSymbol, payload)
+func (c *Client) ExtractResources(ShipSymbol string) (*models.ExtractionResponse, *models.APIError) {
+	return api.ExtractResources(c.Post, ShipSymbol)
 }
 
 func (c *Client) SiphonResources(ShipSymbol string) (*models.SiphonResponse, *models.APIError) {
@@ -571,6 +575,14 @@ func (c *Client) GetRepairShip(ShipSymbol string) (*models.GetRepairShipResponse
 
 func (c *Client) RepairShip(ShipSymbol string) (*models.RepairShipResponse, *models.APIError) {
 	return api.RepairShip(c.Post, ShipSymbol)
+}
+
+func (c *Client) GetRouteToDestination(graph models.Graph, destination string, shipSymbol string) (*models.Route, error) {
+	return api.GetRouteToDestination(c.Get, graph, destination, shipSymbol)
+}
+
+func (c *Client) BuildGraph(systemSymbol string, engineSpeed int) (models.Graph, error) {
+	return api.BuildGraph(c.Get, systemSymbol, engineSpeed)
 }
 
 // Functions from factions.go

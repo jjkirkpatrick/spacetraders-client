@@ -28,12 +28,14 @@ type Shipyard struct {
 }
 
 type Transaction struct {
-	WaypointSymbol string   `json:"waypointSymbol" `
-	ShipSymbol     string   `json:"shipSymbol"  deprecated:"true"`
-	ShipType       ShipType `json:"shipType" `
-	Price          int      `json:"price" `
-	AgentSymbol    string   `json:"agentSymbol" `
-	Timestamp      string   `json:"timestamp"  format:"date-time"`
+	WaypointSymbol string `json:"waypointSymbol"`
+	ShipSymbol     string `json:"shipSymbol"`
+	TradeSymbol    string `json:"tradeSymbol"`
+	Type           string `json:"type" enum:"PURCHASE,SELL"`
+	Units          int    `json:"units"`
+	PricePerUnit   int    `json:"pricePerUnit"`
+	TotalPrice     int    `json:"totalPrice"`
+	Timestamp      string `json:"timestamp"`
 }
 
 type ShipyardShip struct {

@@ -5,10 +5,6 @@ type PurchaseShipRequest struct {
 	WaypointSymbol string   `json:"waypointSymbol"`
 }
 
-type OrbitRequest struct {
-	ShipSymbol string `json:"shipSymbol"`
-}
-
 type RefineRequest struct {
 	Produce string `json:"produce"`
 }
@@ -31,18 +27,37 @@ type Ship struct {
 
 // ShipRegistration represents the registration information of a ship
 type ShipRegistration struct {
-	Name          string `json:"name"`
-	FactionSymbol string `json:"factionSymbol"`
-	Role          string `json:"role"`
+	Name          string               `json:"name"`
+	FactionSymbol string               `json:"factionSymbol"`
+	Role          ShipRegistrationRole `json:"role"`
 }
+
+type ShipRegistrationRole string
+
+const (
+	Fabricator  ShipRegistrationRole = "FABRICATOR"
+	Harvester   ShipRegistrationRole = "HARVESTER"
+	Hauler      ShipRegistrationRole = "HAULER"
+	Interceptor ShipRegistrationRole = "INTERCEPTOR"
+	Excavator   ShipRegistrationRole = "EXCAVATOR"
+	Transport   ShipRegistrationRole = "TRANSPORT"
+	Repair      ShipRegistrationRole = "REPAIR"
+	Surveyor    ShipRegistrationRole = "SURVEYOR"
+	Command     ShipRegistrationRole = "COMMAND"
+	Carrier     ShipRegistrationRole = "CARRIER"
+	Patrol      ShipRegistrationRole = "PATROL"
+	Satellite   ShipRegistrationRole = "SATELLITE"
+	Explorer    ShipRegistrationRole = "EXPLORER"
+	Refinery    ShipRegistrationRole = "REFINERY"
+)
 
 // ShipNav represents the navigation information of a ship
 type ShipNav struct {
 	SystemSymbol   string       `json:"systemSymbol"`
 	WaypointSymbol string       `json:"waypointSymbol"`
 	Route          ShipNavRoute `json:"route"`
-	Status         string       `json:"status"`
-	FlightMode     string       `json:"flightMode"`
+	Status         NavStatus    `json:"status"`
+	FlightMode     FlightMode   `json:"flightMode"`
 }
 
 // ShipNavRoute represents the route information of a ship's navigation

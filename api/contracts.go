@@ -67,6 +67,8 @@ func AcceptContract(post PostFunc, contractId string) (*models.Agent, *models.Co
 func DeliverContractCargo(post PostFunc, contractId string, body models.DeliverContractCargoRequest) (*models.Contract, *models.Cargo, *models.APIError) {
 	endpoint := fmt.Sprintf("/my/contracts/%s/deliver", contractId)
 
+	fmt.Println("Delivering Contract Cargo with Request Body:", body)
+
 	var response struct {
 		Data struct {
 			Contract *models.Contract `json:"contract"`

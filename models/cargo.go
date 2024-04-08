@@ -7,9 +7,9 @@ type DeliverContractCargoRequest struct {
 }
 
 type Cargo struct {
-	Capacity  int       `json:"capacity"`
-	Units     int       `json:"units"`
-	Inventory Inventory `json:"inventory"`
+	Capacity  int         `json:"capacity"`
+	Units     int         `json:"units"`
+	Inventory []Inventory `json:"inventory"`
 }
 
 type Inventory struct {

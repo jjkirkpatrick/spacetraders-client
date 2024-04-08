@@ -71,14 +71,14 @@ func GetShipCargo(get GetFunc, ShipSymbol string) (*models.Cargo, *models.APIErr
 }
 
 // OrbitShip allows a models.Ship to orbit a celestial body
-func OrbitShip(post PostFunc, ShipSymbol string, payload *models.OrbitRequest) (*models.ShipNav, *models.APIError) {
+func OrbitShip(post PostFunc, ShipSymbol string) (*models.ShipNav, *models.APIError) {
 	endpoint := fmt.Sprintf("/my/Ships/%s/orbit", ShipSymbol)
 
 	var response struct {
 		Data models.ShipNav `json:"data"`
 	}
 
-	err := post(endpoint, payload, nil, &response)
+	err := post(endpoint, nil, nil, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -161,12 +161,12 @@ func CreateSurvey(post PostFunc, ShipSymbol string) (*models.CreateSurveyRespons
 }
 
 // ExtractResources initiates the resource extraction process for a models.Ship
-func ExtractResources(post PostFunc, ShipSymbol string, payload *models.Survey) (*models.ExtractionResponse, *models.APIError) {
+func ExtractResources(post PostFunc, ShipSymbol string) (*models.ExtractionResponse, *models.APIError) {
 	endpoint := fmt.Sprintf("/my/Ships/%s/extract", ShipSymbol)
 
 	var response models.ExtractionResponse
 
-	err := post(endpoint, payload, nil, &response)
+	err := post(endpoint, nil, nil, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +346,14 @@ func RefuelShip(post PostFunc, ShipSymbol string, payload *models.RefuelShipRequ
 	endpoint := fmt.Sprintf("/my/Ships/%s/refuel", ShipSymbol)
 
 	var response models.RefuelShipResponse
-	err := post(endpoint, payload, nil, &response)
+	var err *models.APIError
+
+	if payload == nil {
+		err = post(endpoint, nil, nil, &response)
+	} else {
+		err = post(endpoint, payload, nil, &response)
+	}
+
 	if err != nil {
 		return nil, err
 	}
