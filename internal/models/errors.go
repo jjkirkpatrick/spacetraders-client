@@ -16,6 +16,11 @@ func (e APIError) Error() string {
 	return fmt.Sprintf("API error %d: %s", e.Code, e.Message)
 }
 
+// AsError converts APIError to a standard error
+func (e APIError) AsError() error {
+	return fmt.Errorf("API error %d: %s", e.Code, e.Message)
+}
+
 // IsAPIError checks if an error is of type APIError
 func IsAPIError(err error) bool {
 	_, ok := err.(APIError)

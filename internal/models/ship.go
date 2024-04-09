@@ -21,8 +21,8 @@ type Ship struct {
 	Cooldown     ShipCooldown     `json:"cooldown"`
 	Modules      []ShipModule     `json:"modules"`
 	Mounts       []ShipMount      `json:"mounts"`
-	Cargo        ShipCargo        `json:"cargo"`
-	Fuel         ShipFuel         `json:"fuel"`
+	Cargo        Cargo            `json:"cargo"`
+	Fuel         FuelDetails      `json:"fuel"`
 }
 
 // ShipRegistration represents the registration information of a ship
@@ -150,34 +150,6 @@ type ShipMount struct {
 	Requirements ShipRequirements `json:"requirements"`
 }
 
-// ShipCargo represents the cargo information of a ship
-type ShipCargo struct {
-	Capacity  int             `json:"capacity"`
-	Units     int             `json:"units"`
-	Inventory []ShipCargoItem `json:"inventory"`
-}
-
-// ShipCargoItem represents an item in a ship's cargo
-type ShipCargoItem struct {
-	Symbol      string `json:"symbol"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Units       int    `json:"units"`
-}
-
-// ShipFuel represents the fuel information of a ship
-type ShipFuel struct {
-	Current  int              `json:"current"`
-	Capacity int              `json:"capacity"`
-	Consumed ShipFuelConsumed `json:"consumed"`
-}
-
-// ShipFuelConsumed represents the fuel consumed by a ship
-type ShipFuelConsumed struct {
-	Amount    int    `json:"amount"`
-	Timestamp string `json:"timestamp"`
-}
-
 // ShipRequirements represents the requirements for installing a component on a ship
 type ShipRequirements struct {
 	Power int `json:"power"`
@@ -201,9 +173,9 @@ type Deposit struct {
 
 // FuelDetails represents the details of the ship's fuel tanks
 type FuelDetails struct {
-	Current  int           `json:"current" `
-	Capacity int           `json:"capacity" `
-	Consumed *FuelConsumed `json:"consumed,omitempty"`
+	Current  int          `json:"current" `
+	Capacity int          `json:"capacity" `
+	Consumed FuelConsumed `json:"consumed,omitempty"`
 }
 
 // FuelConsumed represents the fuel consumption data
@@ -248,3 +220,13 @@ const (
 	MountMissileLauncherI MountSymbol = "MOUNT_MISSILE_LAUNCHER_I"
 	MountTurretI          MountSymbol = "MOUNT_TURRET_I"
 )
+
+type Produced struct {
+	TradeSymbol GoodSymbol `json:"tradeSymbol"`
+	Units       int        `json:"units"`
+}
+
+type Consumed struct {
+	TradeSymbol GoodSymbol `json:"tradeSymbol"`
+	Units       int        `json:"units"`
+}

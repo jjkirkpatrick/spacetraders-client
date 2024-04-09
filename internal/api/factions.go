@@ -3,7 +3,7 @@ package api
 import (
 	"fmt"
 
-	"github.com/jjkirkpatrick/spacetraders-client/models"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
 )
 
 func GetFaction(get GetFunc, factionSymbol string) (*models.Faction, error) {

@@ -4,7 +4,7 @@ import (
 	"container/heap"
 	"math"
 
-	"github.com/jjkirkpatrick/spacetraders-client/models"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
 )
 
 func GetRouteToDestination(get GetFunc, graph models.Graph, destination string, shipSymbol string) (*models.Route, error) {

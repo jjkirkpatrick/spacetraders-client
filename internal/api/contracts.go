@@ -3,7 +3,7 @@ package api
 import (
 	"fmt"
 
-	"github.com/jjkirkpatrick/spacetraders-client/models"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
 )
 
 type listContractResponse struct {

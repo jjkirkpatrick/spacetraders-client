@@ -3,7 +3,7 @@ package api
 import (
 	"fmt"
 
-	"github.com/jjkirkpatrick/spacetraders-client/models"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
 )
 
 func ListShips(get GetFunc, meta *models.Meta) ([]*models.Ship, *models.Meta, *models.APIError) {
@@ -73,9 +73,10 @@ func GetShipCargo(get GetFunc, ShipSymbol string) (*models.Cargo, *models.APIErr
 // OrbitShip allows a models.Ship to orbit a celestial body
 func OrbitShip(post PostFunc, ShipSymbol string) (*models.ShipNav, *models.APIError) {
 	endpoint := fmt.Sprintf("/my/Ships/%s/orbit", ShipSymbol)
-
 	var response struct {
-		Data models.ShipNav `json:"data"`
+		Data struct {
+			Nav models.ShipNav `json:"nav"`
+		} `json:"data"`
 	}
 
 	err := post(endpoint, nil, nil, &response)
@@ -83,7 +84,7 @@ func OrbitShip(post PostFunc, ShipSymbol string) (*models.ShipNav, *models.APIEr
 		return nil, err
 	}
 
-	return &response.Data, nil
+	return &response.Data.Nav, nil
 }
 
 // ShipRefine initiates the refining process for a models.Ship
@@ -135,7 +136,9 @@ func DockShip(post PostFunc, ShipSymbol string) (*models.ShipNav, *models.APIErr
 	endpoint := fmt.Sprintf("/my/Ships/%s/dock", ShipSymbol)
 
 	var response struct {
-		Data models.ShipNav `json:"data"`
+		Data struct {
+			Nav models.ShipNav `json:"nav"`
+		} `json:"Data"`
 	}
 
 	err := post(endpoint, nil, nil, &response)
@@ -143,7 +146,7 @@ func DockShip(post PostFunc, ShipSymbol string) (*models.ShipNav, *models.APIErr
 		return nil, err
 	}
 
-	return &response.Data, nil
+	return &response.Data.Nav, nil
 }
 
 // CreateSurvey initiates a survey process for a models.Ship
@@ -244,10 +247,10 @@ func NavigateShip(post PostFunc, ShipSymbol string, payload *models.NavigateRequ
 }
 
 // PatchShipNav updates the navigation details of a models.Ship
-func PatchShipNav(patch PatchFunc, ShipSymbol string, payload *models.NavUpdateRequest) (*models.PatchShipNacResponse, *models.APIError) {
+func PatchShipNav(patch PatchFunc, ShipSymbol string, payload *models.NavUpdateRequest) (*models.PatchShipNavResponse, *models.APIError) {
 	endpoint := fmt.Sprintf("/my/Ships/%s/nav", ShipSymbol)
 
-	var response models.PatchShipNacResponse
+	var response models.PatchShipNavResponse
 
 	err := patch(endpoint, payload, nil, &response)
 	if err != nil {

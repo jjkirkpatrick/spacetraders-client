@@ -180,7 +180,7 @@ type RepairShipResponse struct {
 	} `json:"data"`
 }
 
-type PatchShipNacResponse struct {
+type PatchShipNavResponse struct {
 	Data struct {
 		SystemSymbol   string       `json:"systemSymbol"`
 		WaypointSymbol string       `json:"waypointSymbol"`
@@ -202,14 +202,8 @@ type ShipRefineResponse struct {
 	Data struct {
 		Cargo    Cargo        `json:"cargo"`
 		Cooldown ShipCooldown `json:"coolDown"`
-		Produced struct {
-			TradeSymbol GoodSymbol `json:"tradeSymbol"`
-			Units       int        `json:"units"`
-		} `json:"produced"`
-		Consumed struct {
-			TradeSymbol GoodSymbol `json:"tradeSymbol"`
-			Units       int        `json:"units"`
-		} `json:"consumed"`
+		Produced Produced     `json:"produced"`
+		Consumed Consumed     `json:"consumed"`
 	} `json:"data"`
 }
 
