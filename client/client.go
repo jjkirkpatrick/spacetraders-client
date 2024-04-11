@@ -25,7 +25,7 @@ type Client struct {
 	httpClient      *resty.Client
 	retryCount      int
 	retryDelay      time.Duration
-	metricsReporter metrics.MetricsReporter
+	MetricsReporter metrics.MetricsReporter
 	CacheClient     *cache.Cache
 	logger          *log.Logger
 }
@@ -65,7 +65,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		context:         context.Background(),
 		retryCount:      options.RetryCount,
 		retryDelay:      options.RetryDelay,
-		metricsReporter: &metrics.NoOpMetricsReporter{},
+		MetricsReporter: &metrics.NoOpMetricsReporter{},
 		CacheClient:     cache.NewCache(),
 		logger:          options.Logger,
 	}
@@ -88,7 +88,7 @@ func (c *Client) MetricBuilder() *metrics.MetricBuilder {
 }
 
 func (c *Client) ConfigureMetricsClient(url, token, org, bucket string) {
-	c.metricsReporter = metrics.NewMetricsClient(url, token, org, bucket)
+	c.MetricsReporter = metrics.NewMetricsClient(url, token, org, bucket)
 }
 
 // Get sends a GET request to the specified endpoint with optional query parameters
@@ -144,7 +144,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 			Field("count", 1).
 			Timestamp(time.Now()).
 			Build()
-		c.metricsReporter.WritePoint(metric)
+		c.MetricsReporter.WritePoint(metric)
 		if err != nil {
 			time.Sleep(backoff)
 			backoff *= 2 // Exponential backoff
@@ -162,7 +162,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 					Field("count", 1).
 					Timestamp(time.Now()).
 					Build()
-				c.metricsReporter.WritePoint(metric)
+				c.MetricsReporter.WritePoint(metric)
 
 				continue
 			} else {
@@ -176,7 +176,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 						Field("count", 1).
 						Timestamp(time.Now()).
 						Build()
-					c.metricsReporter.WritePoint(metric)
+					c.MetricsReporter.WritePoint(metric)
 
 				}
 				if apiError != nil || i == c.retryCount {
@@ -203,7 +203,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 			Field("count", 1).
 			Timestamp(time.Now()).
 			Build()
-		c.metricsReporter.WritePoint(metric)
+		c.MetricsReporter.WritePoint(metric)
 	}
 	return apiError
 }
@@ -244,7 +244,7 @@ func isRateLimitError(statusCode int) bool {
 }
 
 func (c *Client) WriteMetric(metric metrics.Metric) {
-	c.metricsReporter.WritePoint(metric)
+	c.MetricsReporter.WritePoint(metric)
 }
 
 func (c *Client) GetToken() string {

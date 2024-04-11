@@ -24,7 +24,7 @@ func TestGetOrRegisterToken(t *testing.T) {
 		context:         context.Background(),
 		retryCount:      options.RetryCount,
 		retryDelay:      options.RetryDelay,
-		metricsReporter: &metrics.NoOpMetricsReporter{},
+		MetricsReporter: &metrics.NoOpMetricsReporter{},
 		CacheClient:     cache.NewCache(),
 		logger:          options.Logger,
 	}
@@ -61,7 +61,7 @@ func TestTokenFileOperations(t *testing.T) {
 		context:         context.Background(),
 		retryCount:      options.RetryCount,
 		retryDelay:      options.RetryDelay,
-		metricsReporter: &metrics.NoOpMetricsReporter{},
+		MetricsReporter: &metrics.NoOpMetricsReporter{},
 		CacheClient:     cache.NewCache(),
 		logger:          options.Logger,
 	}
