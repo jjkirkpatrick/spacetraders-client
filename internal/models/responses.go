@@ -239,21 +239,6 @@ type GetSystemResponse struct {
 	} `json:"data"`
 }
 
-type ListWaypointsResponse struct {
-	Symbol              string          `json:"symbol"`
-	Type                WaypointType    `json:"type"`
-	SystemSymbol        string          `json:"systemSymbol"`
-	X                   int             `json:"x"`
-	Y                   int             `json:"y"`
-	Orbitals            []Orbital       `json:"orbitals"`
-	Orbits              string          `json:"orbits"`
-	Faction             Faction         `json:"factions"`
-	Traits              []WaypoinTraits `json:"traits"`
-	Modifiers           []Modifier      `json:"modifiers"`
-	Chart               Chart           `json:"chart"`
-	IsUnderConstruction bool            `json:"isUnderConstruction"`
-}
-
 type GetWaypointResponse struct {
 	Data struct {
 		Symbol              string          `json:"symbol"`

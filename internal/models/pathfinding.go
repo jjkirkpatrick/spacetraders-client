@@ -1,6 +1,6 @@
 package models
 
-type Route struct {
+type PathfindingRoute struct {
 	StartLocation string
 	EndLocation   string
 	Steps         []RouteStep

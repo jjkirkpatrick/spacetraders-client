@@ -59,23 +59,23 @@ func GetShip(c *client.Client, symbol string) (*Ship, error) {
 	return shipEntity, nil
 }
 
-func PurchaseShip(c *client.Client, shipType string, waypoint string) (*Ship, error) {
+func PurchaseShip(c *client.Client, shipType string, waypoint string) (*models.Agent, *Ship, *models.Transaction, error) {
 	purchaseShipRequest := &models.PurchaseShipRequest{
 		ShipType:       models.ShipType(shipType),
 		WaypointSymbol: waypoint,
 	}
 
-	ship, err := api.PurchaseShip(c.Post, purchaseShipRequest)
+	response, err := api.PurchaseShip(c.Post, purchaseShipRequest)
 	if err != nil {
-		return nil, err.AsError()
+		return nil, nil, nil, err.AsError()
 	}
 
 	shipEntity := &Ship{
-		Ship:   ship.Data.Ship,
+		Ship:   response.Data.Ship,
 		client: c,
 	}
 
-	return shipEntity, nil
+	return &response.Data.Agent, shipEntity, &response.Data.Transaction, nil
 }
 
 func (s *Ship) Orbit() error {

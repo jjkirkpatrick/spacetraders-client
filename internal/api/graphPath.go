@@ -7,7 +7,7 @@ import (
 	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
 )
 
-func GetRouteToDestination(get GetFunc, graph models.Graph, destination string, shipSymbol string) (*models.Route, error) {
+func GetRouteToDestination(get GetFunc, graph models.Graph, destination string, shipSymbol string) (*models.PathfindingRoute, error) {
 	// Get ship details
 	ship, err := GetShip(get, shipSymbol)
 	if err != nil {
@@ -25,7 +25,7 @@ func GetRouteToDestination(get GetFunc, graph models.Graph, destination string, 
 	// Find the optimal route using Dijkstra's algorithm
 	steps, totalTime := findOptimalRoute(graph, allWaypoints, startLocation, destination, ship.Fuel.Current, ship.Fuel.Capacity)
 
-	return &models.Route{StartLocation: startLocation, EndLocation: destination, Steps: steps, TotalTime: totalTime}, nil
+	return &models.PathfindingRoute{StartLocation: startLocation, EndLocation: destination, Steps: steps, TotalTime: totalTime}, nil
 }
 
 func getAllWaypoints(get GetFunc, systemSymbol string) ([]*models.Waypoint, error) {

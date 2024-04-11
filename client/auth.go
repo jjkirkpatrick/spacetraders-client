@@ -3,7 +3,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"os"
 
 	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
@@ -34,6 +34,22 @@ type TokenFile struct {
 
 // GetOrRegisterToken retrieves the token for the given symbol from the token file or registers a new agent if the token doesn't exist
 func (c *Client) getOrRegisterToken(faction, symbol, email string) error {
+	if faction == "" || symbol == "" {
+		return fmt.Errorf("faction and symbol must be set")
+	}
+
+	validFactions := map[string]bool{
+		"COSMIC": true, "VOID": true, "GALACTIC": true, "QUANTUM": true,
+		"DOMINION": true, "ASTRO": true, "CORSAIRS": true, "OBSIDIAN": true,
+		"AEGIS": true, "UNITED": true, "SOLITARY": true, "COBALT": true,
+		"OMEGA": true, "ECHO": true, "LORDS": true, "CULT": true,
+		"ANCIENTS": true, "SHADOW": true, "ETHEREAL": true,
+	}
+
+	if _, ok := validFactions[faction]; !ok {
+		return fmt.Errorf("invalid faction: %s", faction)
+	}
+
 	// Check if a token exists for the given symbol
 	token, err := c.getTokenFromFile(symbol)
 	if err != nil {
@@ -59,8 +75,6 @@ func (c *Client) getOrRegisterToken(faction, symbol, email string) error {
 	if apiErr != nil {
 		return apiErr
 	}
-
-	fmt.Println("Agent registered successfully:", registerResp.Data)
 
 	// Update the token file with the new token
 	err = c.updateTokenFile(symbol, registerResp.Data.Token)
@@ -105,37 +119,48 @@ func (c *Client) getTokenFromFile(symbol string) (string, error) {
 // updateTokenFile updates the token file with the new token for the given symbol
 func (c *Client) updateTokenFile(symbol, token string) error {
 	fmt.Println("Updating token file with new token for symbol", symbol)
-	file, err := os.OpenFile("tokens.json", os.O_RDWR|os.O_CREATE, 0644)
+
+	// Read the current contents of the file
+	fileContent, err := ioutil.ReadFile("tokens.json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Token file doesn't exist, create a new one with the current token
+			tokenFile := TokenFile{
+				Tokens: map[string]string{
+					symbol: token,
+				},
+			}
+			return c.writeTokenFile(tokenFile)
+		}
+		return err
+	}
+
+	var tokenFile TokenFile
+	err = json.Unmarshal(fileContent, &tokenFile)
+	if err != nil {
+		return err
+	}
+
+	// Update the token map with the new token
+	if tokenFile.Tokens == nil {
+		tokenFile.Tokens = make(map[string]string)
+	}
+	tokenFile.Tokens[symbol] = token
+
+	// Write the updated token file
+	return c.writeTokenFile(tokenFile)
+}
+
+func (c *Client) writeTokenFile(tokenFile TokenFile) error {
+	file, err := os.OpenFile("tokens.json", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	var tokenFile TokenFile
-	err = json.NewDecoder(file).Decode(&tokenFile)
-	if err != nil && err != io.EOF {
-		return err
-	}
-	if tokenFile.Tokens == nil {
-		tokenFile.Tokens = make(map[string]string)
-	}
-
-	tokenFile.Tokens[symbol] = token
-
-	// Reset the file pointer to the beginning
-	_, err = file.Seek(0, 0)
-	if err != nil {
-		return err
-	}
-
-	// Truncate the file to clear its contents
-	err = file.Truncate(0)
-	if err != nil {
-		return err
-	}
-
-	// Write the updated token file
-	err = json.NewEncoder(file).Encode(tokenFile)
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	err = encoder.Encode(tokenFile)
 	if err != nil {
 		return err
 	}

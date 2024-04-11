@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/cache"
 	"github.com/jjkirkpatrick/spacetraders-client/internal/metrics"
 	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
 	"golang.org/x/time/rate"
@@ -25,6 +26,7 @@ type Client struct {
 	retryCount      int
 	retryDelay      time.Duration
 	metricsReporter metrics.MetricsReporter
+	CacheClient     *cache.Cache
 	logger          *log.Logger
 }
 
@@ -64,6 +66,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		retryCount:      options.RetryCount,
 		retryDelay:      options.RetryDelay,
 		metricsReporter: &metrics.NoOpMetricsReporter{},
+		CacheClient:     cache.NewCache(),
 		logger:          options.Logger,
 	}
 
@@ -72,6 +75,8 @@ func NewClient(options ClientOptions) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("Setting rate limiter")
 
 	client.httpClient.SetRateLimiter(rate.NewLimiter(rate.Limit(options.RequestsPerSecond), 10))
 
