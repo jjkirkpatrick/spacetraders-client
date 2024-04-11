@@ -13,9 +13,16 @@ type Ship struct {
 	client *client.Client
 }
 
-func ShipPaginator(c *client.Client) (*client.Paginator[*Ship], error) {
+func ListShips(c *client.Client) ([]*Ship, error) {
 	fetchFunc := func(meta models.Meta) ([]*Ship, models.Meta, error) {
 		metaPtr := &meta
+
+		// Check if ships are in cache
+		if cachedShips, found := c.CacheClient.Get("all_ships"); found {
+			convertedShips := cachedShips.([]*Ship)
+			return convertedShips, meta, nil
+		}
+
 		ships, metaPtr, err := api.ListShips(c.Get, metaPtr)
 
 		var convertedShips []*Ship
@@ -36,13 +43,15 @@ func ShipPaginator(c *client.Client) (*client.Paginator[*Ship], error) {
 			return convertedShips, *metaPtr, err.AsError()
 		}
 		if metaPtr != nil {
+			// Store ships in cache
+			c.CacheClient.Set("all_ships", convertedShips, 300) // Cache for 5 minutes (300 seconds)
 			return convertedShips, *metaPtr, nil
 		} else {
 			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
 			return convertedShips, defaultMeta, nil
 		}
 	}
-	return client.NewPaginator[*Ship](fetchFunc), nil
+	return client.NewPaginator[*Ship](fetchFunc).FetchAllPages()
 }
 
 func GetShip(c *client.Client, symbol string) (*Ship, error) {
@@ -74,6 +83,8 @@ func PurchaseShip(c *client.Client, shipType string, waypoint string) (*models.A
 		Ship:   response.Data.Ship,
 		client: c,
 	}
+
+	c.CacheClient.Delete("all_ships")
 
 	return &response.Data.Agent, shipEntity, &response.Data.Transaction, nil
 }
@@ -440,6 +451,8 @@ func (s *Ship) ScrapShip() (*models.Transaction, error) {
 	if err != nil {
 		return nil, err.AsError()
 	}
+
+	s.client.CacheClient.Delete("all_ships")
 
 	return &response.Data.Transaction, nil
 }

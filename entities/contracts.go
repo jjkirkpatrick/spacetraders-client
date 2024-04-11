@@ -11,7 +11,7 @@ type Contract struct {
 	client *client.Client
 }
 
-func ContractPaginator(c *client.Client) (*client.Paginator[*Contract], error) {
+func ContractPaginator(c *client.Client) ([]*Contract, error) {
 	fetchFunc := func(meta models.Meta) ([]*Contract, models.Meta, error) {
 		metaPtr := &meta
 		contracts, metaPtr, err := api.ListContracts(c.Get, metaPtr)
@@ -40,7 +40,7 @@ func ContractPaginator(c *client.Client) (*client.Paginator[*Contract], error) {
 			return convertedContracts, defaultMeta, nil
 		}
 	}
-	return client.NewPaginator[*Contract](fetchFunc), nil
+	return client.NewPaginator[*Contract](fetchFunc).FetchAllPages()
 }
 
 func GetContract(c *client.Client, symbol string) (*Contract, error) {

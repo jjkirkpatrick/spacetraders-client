@@ -11,7 +11,7 @@ type Agent struct {
 	client *client.Client
 }
 
-func AgentPaginator(c *client.Client) (*client.Paginator[*Agent], error) {
+func ListPublicAgents(c *client.Client) ([]*Agent, error) {
 	fetchFunc := func(meta models.Meta) ([]*Agent, models.Meta, error) {
 		metaPtr := &meta
 		agents, metaPtr, err := api.ListAgents(c.Get, metaPtr)
@@ -40,7 +40,7 @@ func AgentPaginator(c *client.Client) (*client.Paginator[*Agent], error) {
 			return convertedAgents, defaultMeta, nil
 		}
 	}
-	return client.NewPaginator[*Agent](fetchFunc), nil
+	return client.NewPaginator[*Agent](fetchFunc).FetchAllPages()
 }
 
 func GetAgent(c *client.Client) (*Agent, error) {

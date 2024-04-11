@@ -26,12 +26,12 @@ func NewPaginator[T any](fetchFunc func(models.Meta) ([]T, models.Meta, error)) 
 }
 
 // FetchFirstPage fetches the first page based on the current Meta settings.
-func (p *Paginator[T]) FetchFirstPage() (*Paginator[T], error) {
-	return p.FetchPage(1)
+func (p *Paginator[T]) fetchFirstPage() (*Paginator[T], error) {
+	return p.fetchPage(1)
 }
 
 // FetchPage allows fetching a specific page by its number.
-func (p *Paginator[T]) FetchPage(page int) (*Paginator[T], error) {
+func (p *Paginator[T]) fetchPage(page int) (*Paginator[T], error) {
 	p.Meta.Page = page
 	data, meta, err := p.fetchPageFunc(p.Meta)
 	if err != nil {
@@ -43,7 +43,7 @@ func (p *Paginator[T]) FetchPage(page int) (*Paginator[T], error) {
 }
 
 // GetNextPage fetches the next page.
-func (p *Paginator[T]) GetNextPage() (*Paginator[T], error) {
+func (p *Paginator[T]) getNextPage() (*Paginator[T], error) {
 	p.Meta.Page++
 	newData, newMeta, err := p.fetchPageFunc(p.Meta) // Use the updated Meta
 	if err != nil {
@@ -55,7 +55,7 @@ func (p *Paginator[T]) GetNextPage() (*Paginator[T], error) {
 }
 
 // GetPreviousPage fetches the previous page.
-func (p *Paginator[T]) GetPreviousPage() (*Paginator[T], error) {
+func (p *Paginator[T]) getPreviousPage() (*Paginator[T], error) {
 	if p.Meta.Page > 1 {
 		p.Meta.Page-- // Decrement the page number for the previous page
 	}
@@ -72,7 +72,7 @@ func (p *Paginator[T]) GetPreviousPage() (*Paginator[T], error) {
 func (p *Paginator[T]) FetchAllPages() ([]T, error) {
 	var allData []T
 
-	currentPage, err := p.FetchFirstPage()
+	currentPage, err := p.fetchFirstPage()
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (p *Paginator[T]) FetchAllPages() ([]T, error) {
 
 	// Loop until no more data is available.
 	for len(currentPage.Data) > 0 {
-		nextPage, err := currentPage.GetNextPage()
+		nextPage, err := currentPage.getNextPage()
 		if err != nil {
 			// If an error occurs, stop fetching and return what we have so far along with the error.
 			return allData, err

@@ -11,7 +11,7 @@ type System struct {
 	client *client.Client
 }
 
-func SystemPaginator(c *client.Client) (*client.Paginator[*System], error) {
+func ListSystems(c *client.Client) ([]*System, error) {
 	fetchFunc := func(meta models.Meta) ([]*System, models.Meta, error) {
 		metaPtr := &meta
 		systems, metaPtr, err := api.ListSystems(c.Get, metaPtr)
@@ -40,7 +40,7 @@ func SystemPaginator(c *client.Client) (*client.Paginator[*System], error) {
 			return convertedSystems, defaultMeta, nil
 		}
 	}
-	return client.NewPaginator[*System](fetchFunc), nil
+	return client.NewPaginator[*System](fetchFunc).FetchAllPages()
 }
 
 func GetSystem(c *client.Client, symbol string) (*System, error) {
