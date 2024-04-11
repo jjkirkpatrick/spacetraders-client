@@ -11,7 +11,7 @@ type Contract struct {
 	client *client.Client
 }
 
-func ContractPaginator(c *client.Client) ([]*Contract, error) {
+func ListContracts(c *client.Client) ([]*Contract, error) {
 	fetchFunc := func(meta models.Meta) ([]*Contract, models.Meta, error) {
 		metaPtr := &meta
 		contracts, metaPtr, err := api.ListContracts(c.Get, metaPtr)

@@ -14,6 +14,7 @@ type System struct {
 func ListSystems(c *client.Client) ([]*System, error) {
 	fetchFunc := func(meta models.Meta) ([]*System, models.Meta, error) {
 		metaPtr := &meta
+
 		systems, metaPtr, err := api.ListSystems(c.Get, metaPtr)
 
 		var convertedSystems []*System
@@ -34,6 +35,7 @@ func ListSystems(c *client.Client) ([]*System, error) {
 			return convertedSystems, *metaPtr, err.AsError()
 		}
 		if metaPtr != nil {
+
 			return convertedSystems, *metaPtr, nil
 		} else {
 			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}

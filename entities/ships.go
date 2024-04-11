@@ -18,11 +18,6 @@ func ListShips(c *client.Client) ([]*Ship, error) {
 		metaPtr := &meta
 
 		// Check if ships are in cache
-		if cachedShips, found := c.CacheClient.Get("all_ships"); found {
-			convertedShips := cachedShips.([]*Ship)
-			return convertedShips, meta, nil
-		}
-
 		ships, metaPtr, err := api.ListShips(c.Get, metaPtr)
 
 		var convertedShips []*Ship
@@ -44,7 +39,6 @@ func ListShips(c *client.Client) ([]*Ship, error) {
 		}
 		if metaPtr != nil {
 			// Store ships in cache
-			c.CacheClient.Set("all_ships", convertedShips, 300) // Cache for 5 minutes (300 seconds)
 			return convertedShips, *metaPtr, nil
 		} else {
 			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
