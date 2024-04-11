@@ -54,16 +54,23 @@ client, cerr := client.NewClient(options, nil)
 
 ```go
   // Create a new paginator for the list of factions endpoint
-	paginator, err := client.ListFactions()
-
-  // Fetch all pages of results
-	allPages, err := paginator.FetchAllPages()
-
+	Factions, err := client.ListFactions()
   // Iterate over the results
-	for _, faction := range allPages {
+	for _, faction := range Factions {
 		logger.Printf("Faction: %+v", faction.Symbol)
 	}
 ```
+
+For more detailed information on various operations and functionalities within the SpaceTraders universe, refer to the following guides in the Docs folder:
+
+- [Ship Operations Guide](Docs/Ships.md): Covers a wide range of ship-related actions, including purchasing, navigating, docking, and managing cargo, among others.
+- [System Operations Guide](Docs/Systems.md): Provides an overview of interacting with system-related functionalities, including listing systems, retrieving detailed system information, and managing waypoints within a system.
+- [Factions Guide](Docs/Factions.md): Details the interactions with factions, including listing factions, understanding faction standings, and participating in faction-related activities.
+- [Contract Operations Guide](Docs/Contracts.md): Explains how to interact with contract-related functionalities, such as listing available contracts, accepting contracts, and fulfilling contract requirements.
+- [Agent Operations Guide](Docs/Agent.md): Describes agent-related operations, including listing public agents, retrieving detailed information about the authenticated agent, and understanding agent dynamics within the universe.
+
+These guides serve as comprehensive resources for understanding how to interact with various aspects of the SpaceTraders universe using the provided client methods.
+
 
 ## Metrics Monitoring with InfluxDB and Grafana
 

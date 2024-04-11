@@ -83,27 +83,27 @@ func PurchaseShip(c *client.Client, shipType string, waypoint string) (*models.A
 	return &response.Data.Agent, shipEntity, &response.Data.Transaction, nil
 }
 
-func (s *Ship) Orbit() error {
+func (s *Ship) Orbit() (*models.ShipNav, error) {
 	nav, err := api.OrbitShip(s.client.Post, s.Symbol)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
-		return err.AsError()
+		return nil, err.AsError()
 	}
 
 	s.Nav = *nav
 
-	return nil
+	return nav, nil
 }
 
-func (s *Ship) Dock() error {
+func (s *Ship) Dock() (*models.ShipNav, error) {
 	nav, err := api.DockShip(s.client.Post, s.Symbol)
 	if err != nil {
-		return err.AsError()
+		return nil, err.AsError()
 	}
 
 	s.Nav = *nav
 
-	return nil
+	return nav, nil
 }
 
 func (s *Ship) FetchCargo() (*models.Cargo, error) {
