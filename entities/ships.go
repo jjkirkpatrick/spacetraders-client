@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"container/heap"
 	"math"
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
@@ -496,29 +497,16 @@ func (s *Ship) RepairShip() (*models.Ship, *models.Transaction, error) {
 }
 
 func (s *Ship) GetRouteToDestination(destination string) (*models.PathfindingRoute, error) {
-
 	log.Debug().Msgf("Getting route for ship %s", s.Symbol)
 
-	// Get current ship location
-	startLocation := s.Nav.WaypointSymbol
-	system, err := GetSystem(s.client, s.Nav.SystemSymbol)
-	if err != nil {
-		return nil, err
-	}
-
-	allWaypoints, _, aerr := system.ListWaypoints("", "")
-	if aerr != nil {
-		return nil, aerr
-	}
-
 	// Find the optimal route using Dijkstra's algorithm
-	steps, totalTime := findOptimalRoute(s, allWaypoints, destination)
-
-	return &models.PathfindingRoute{StartLocation: startLocation, EndLocation: destination, Steps: steps, TotalTime: totalTime}, nil
+	steps, totalTime := s.findOptimalRoute(destination)
+	return &models.PathfindingRoute{StartLocation: s.Nav.WaypointSymbol, EndLocation: destination, Steps: steps, TotalTime: totalTime}, nil
 }
 
 func (s *Ship) buildGraph() (*models.Graph, error) {
 	log.Trace().Msgf("Building graph for ship %s", s.Symbol)
+
 	// Attempt to retrieve the graph from cache first
 	cachedGraph, found := s.client.CacheClient.Get(s.Nav.SystemSymbol)
 	if found {
@@ -529,35 +517,35 @@ func (s *Ship) buildGraph() (*models.Graph, error) {
 		}
 	}
 
+	// Retrieve the system and waypoints from cache or API
+	system, err := s.getSystemFromCache()
+	if err != nil {
+		return nil, err
+	}
+
+	allWaypoints, err := s.getWaypointsFromCache(system)
+	if err != nil {
+		return nil, err
+	}
+
 	graph := make(models.Graph)
 
-	var system *System
-	var allWaypoints []*models.Waypoint
-	var err error // Declare err variable outside of the else blocks to avoid shadowing
-
-	cachedSystem, found := s.client.CacheClient.Get("system_" + s.Nav.SystemSymbol)
-	if found {
-		system, _ = cachedSystem.(*System)
-	} else {
-		system, err = GetSystem(s.client, s.Nav.SystemSymbol) // Use = instead of := to avoid shadowing err
-		if err != nil {
-			return nil, err
-		}
-		s.client.CacheClient.Set("system_"+s.Nav.SystemSymbol, system, 0) // Assuming no expiration for simplicity
-	}
-
-	cachedWaypoints, found := s.client.CacheClient.Get("waypoints_" + s.Nav.SystemSymbol)
-	if found {
-		allWaypoints, _ = cachedWaypoints.([]*models.Waypoint)
-	} else {
-		allWaypoints, _, err = system.ListWaypoints("", "") // Use = instead of := to avoid shadowing err
-		if err != nil {
-			return nil, err
-		}
-		s.client.CacheClient.Set("waypoints_"+s.Nav.SystemSymbol, allWaypoints, 0) // Assuming no expiration for simplicity
-	}
-
+	// Build the graph
 	for _, startWaypoint := range allWaypoints {
+		// Create self-edge for each waypoint
+		if _, ok := graph[startWaypoint.Symbol]; !ok {
+			graph[startWaypoint.Symbol] = make(map[string]map[models.FlightMode]*models.Edge)
+		}
+		if _, ok := graph[startWaypoint.Symbol][startWaypoint.Symbol]; !ok {
+			graph[startWaypoint.Symbol][startWaypoint.Symbol] = make(map[models.FlightMode]*models.Edge)
+		}
+		graph[startWaypoint.Symbol][startWaypoint.Symbol][models.FlightModeCruise] = &models.Edge{
+			Distance:       0,
+			FuelRequired:   0,
+			TravelTime:     0,
+			HasMarketplace: hasMarketplace(allWaypoints, startWaypoint.Symbol),
+		}
+
 		for _, endWaypoint := range allWaypoints {
 			if startWaypoint.Symbol == endWaypoint.Symbol {
 				continue
@@ -566,22 +554,21 @@ func (s *Ship) buildGraph() (*models.Graph, error) {
 			distance := CalculateDistanceBetweenWaypoints(startWaypoint.X, startWaypoint.Y, endWaypoint.X, endWaypoint.Y)
 
 			for _, flightMode := range []models.FlightMode{models.FlightModeDrift, models.FlightModeCruise, models.FlightModeBurn} {
-				if s.IsWithinRange(distance) {
-					fuelRequired := s.CalculateFuelRequired(distance)
-					travelTime := s.CalculateTravelTime(distance)
+				fuelRequired := s.CalculateFuelRequired(distance, flightMode)
+				travelTime := s.CalculateTravelTime(distance, flightMode)
 
-					if _, ok := graph[startWaypoint.Symbol]; !ok {
-						graph[startWaypoint.Symbol] = make(map[string]map[models.FlightMode]*models.Edge)
-					}
-					if _, ok := graph[startWaypoint.Symbol][endWaypoint.Symbol]; !ok {
-						graph[startWaypoint.Symbol][endWaypoint.Symbol] = make(map[models.FlightMode]*models.Edge)
-					}
+				if _, ok := graph[startWaypoint.Symbol]; !ok {
+					graph[startWaypoint.Symbol] = make(map[string]map[models.FlightMode]*models.Edge)
+				}
+				if _, ok := graph[startWaypoint.Symbol][endWaypoint.Symbol]; !ok {
+					graph[startWaypoint.Symbol][endWaypoint.Symbol] = make(map[models.FlightMode]*models.Edge)
+				}
 
-					graph[startWaypoint.Symbol][endWaypoint.Symbol][flightMode] = &models.Edge{
-						Distance:     distance,
-						FuelRequired: fuelRequired,
-						TravelTime:   travelTime,
-					}
+				graph[startWaypoint.Symbol][endWaypoint.Symbol][flightMode] = &models.Edge{
+					Distance:       distance,
+					FuelRequired:   fuelRequired,
+					TravelTime:     travelTime,
+					HasMarketplace: hasMarketplace(allWaypoints, endWaypoint.Symbol),
 				}
 			}
 		}
@@ -589,50 +576,62 @@ func (s *Ship) buildGraph() (*models.Graph, error) {
 
 	s.Graph = graph
 	// Cache the newly built graph
-	s.client.CacheClient.Set(s.Nav.SystemSymbol, graph, 0) // Assuming no expiration for simplicity
+	s.client.CacheClient.Set(s.Nav.SystemSymbol, graph, 0)
 
 	return &graph, nil
 }
 
-//Utility functions
+// Helper functions
 
-// Calculate if the ship is within range of a given distance
-func (s *Ship) IsWithinRange(distance float64) bool {
-	var fuelCost float64
-	switch s.Nav.FlightMode {
-	case models.FlightModeCruise:
-		fuelCost = math.Round(distance)
-	case models.FlightModeDrift:
-		fuelCost = 1
-	case models.FlightModeBurn:
-		fuelCost = math.Max(2, 2*math.Round(distance))
-	default:
-		fuelCost = math.Round(distance) // Default to CRUISE mode if flight mode is unknown
+func (s *Ship) getSystemFromCache() (*System, error) {
+	cachedSystem, found := s.client.CacheClient.Get("system_" + s.Nav.SystemSymbol)
+	if found {
+		system, _ := cachedSystem.(*System)
+		return system, nil
 	}
-	return int(fuelCost) <= s.Fuel.Capacity
+
+	system, err := GetSystem(s.client, s.Nav.SystemSymbol)
+	if err != nil {
+		return nil, err
+	}
+	s.client.CacheClient.Set("system_"+s.Nav.SystemSymbol, system, 0)
+
+	return system, nil
 }
 
-// Calculate the fuel required to travel a given distance
-func (s *Ship) CalculateFuelRequired(distance float64) int {
-	var fuel float64
-	switch s.Nav.FlightMode {
-	case models.FlightModeDrift:
-		fuel = 1 // Drift mode always incurs a cost of 1
-	case models.FlightModeCruise:
-		fuel = math.Round(distance) // Cruise mode rounds the distance
-	case models.FlightModeBurn:
-		fuel = math.Max(2, 2*math.Round(distance)) // Burn mode doubles the rounded distance, minimum cost of 2
-	default:
-		fuel = math.Round(distance) // Default to rounding the distance if flight mode is unknown
+func (s *Ship) getWaypointsFromCache(system *System) ([]*models.Waypoint, error) {
+	cachedWaypoints, found := s.client.CacheClient.Get("waypoints_" + s.Nav.SystemSymbol)
+	if found {
+		allWaypoints, _ := cachedWaypoints.([]*models.Waypoint)
+		return allWaypoints, nil
 	}
+	allWaypoints, _, err := system.ListWaypoints("", "")
+	if err != nil {
+		return nil, err
+	}
+	s.client.CacheClient.Set("waypoints_"+s.Nav.SystemSymbol, allWaypoints, 0)
 
+	return allWaypoints, nil
+}
+
+func (s *Ship) CalculateFuelRequired(distance float64, flightMode models.FlightMode) int {
+	var fuel float64
+	switch flightMode {
+	case models.FlightModeDrift:
+		fuel = 1
+	case models.FlightModeCruise:
+		fuel = math.Round(distance)
+	case models.FlightModeBurn:
+		fuel = math.Max(2, 2*math.Round(distance))
+	default:
+		fuel = math.Round(distance)
+	}
 	return int(fuel)
 }
 
-// Calculate the travel time for a given distance
-func (s *Ship) CalculateTravelTime(distance float64) int {
+func (s *Ship) CalculateTravelTime(distance float64, flightMode models.FlightMode) int {
 	var multiplier float64
-	switch s.Nav.FlightMode {
+	switch flightMode {
 	case models.FlightModeCruise:
 		multiplier = 25
 	case models.FlightModeDrift:
@@ -640,9 +639,100 @@ func (s *Ship) CalculateTravelTime(distance float64) int {
 	case models.FlightModeBurn:
 		multiplier = 12.5
 	default:
-		multiplier = 25 // Default to Cruise mode if flight mode is unknown
+		multiplier = 25
 	}
-
 	travelTime := math.Round(math.Round(math.Max(1, distance))*(multiplier/float64(s.Engine.Speed)) + 15)
 	return int(travelTime)
+}
+
+func (s *Ship) findOptimalRoute(destination string) ([]models.RouteStep, int) {
+	// Create a map to store the shortest distance to each waypoint
+	shortestDistances := make(map[string]int)
+	for waypoint := range s.Graph {
+		shortestDistances[waypoint] = math.MaxInt32
+	}
+	shortestDistances[s.Nav.WaypointSymbol] = 0
+
+	// Create a map to store the previous waypoint in the shortest path
+	previous := make(map[string]string)
+
+	// Create a map to store the flight mode used to reach each waypoint
+	flightModes := make(map[string]models.FlightMode)
+
+	// Create a priority queue to store waypoints to visit
+	pq := make(PriorityQueue, 0)
+	pq = append(pq, &Item{
+		value:    s.Nav.WaypointSymbol,
+		priority: 0,
+	})
+
+	for len(pq) > 0 {
+		current := heap.Pop(&pq).(*Item).value
+
+		// If we have reached the destination waypoint, we can stop searching
+		if current == destination {
+			break
+		}
+
+		// Explore neighboring waypoints
+		for neighbor, edges := range s.Graph[current] {
+			for flightMode, edge := range edges {
+				fuelRequired := edge.FuelRequired
+				travelTime := edge.TravelTime
+
+				// Check if the ship has enough fuel to reach the neighbor waypoint
+				if s.Fuel.Current >= fuelRequired {
+					tentativeDistance := shortestDistances[current] + travelTime
+
+					if tentativeDistance < shortestDistances[neighbor] {
+						shortestDistances[neighbor] = tentativeDistance
+						previous[neighbor] = current
+						flightModes[neighbor] = flightMode
+
+						heap.Push(&pq, &Item{
+							value:    neighbor,
+							priority: tentativeDistance,
+						})
+					}
+				}
+			}
+		}
+
+		// Refuel at the current waypoint if it has a marketplace
+		if edges, ok := s.Graph[current][current]; ok {
+			if edge, ok := edges[models.FlightModeCruise]; ok {
+				if edge != nil {
+					if edge.HasMarketplace {
+						s.Fuel.Current = s.Fuel.Capacity
+					}
+				}
+			}
+		}
+	}
+
+	path := []models.RouteStep{}
+	current := destination
+	totalTime := 0
+
+	for current != s.Nav.WaypointSymbol {
+		previousWaypoint := previous[current]
+		shouldRefuel := false
+
+		if edges, ok := s.Graph[current][current]; ok {
+			if edge, ok := edges[models.FlightModeCruise]; ok && edge != nil {
+				shouldRefuel = edge.HasMarketplace
+			}
+		}
+
+		path = append([]models.RouteStep{{
+			Waypoint:     current,
+			FlightMode:   flightModes[current],
+			ShouldRefuel: shouldRefuel,
+		}}, path...)
+
+		totalTime += s.Graph[previousWaypoint][current][flightModes[current]].TravelTime
+		current = previousWaypoint
+	}
+
+	return path, totalTime
 }
