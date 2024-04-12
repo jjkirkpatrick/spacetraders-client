@@ -1,45 +1,51 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"os"
-
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
+	"github.com/phuslu/log"
 )
 
 func main() {
-	// Set up the logger
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+
+	log.DefaultLogger = log.Logger{
+		Level:      log.InfoLevel,
+		Caller:     1,
+		TimeFormat: "15:04:05",
+		Writer: &log.ConsoleWriter{
+			ColorOutput:    true,
+			EndWithMessage: true,
+			Formatter:      client.Logformat,
+		},
+	}
 
 	// Create a new client with a token
 	options := client.DefaultClientOptions()
-	options.Logger = logger
 
-	options.Symbol = "caching-test"
+	options.Symbol = "caching-example"
 	options.Faction = "COSMIC"
+	options.LogLevel = log.InfoLevel
 
 	client, cerr := client.NewClient(options)
 	if cerr != nil {
-		logger.Fatalf("Failed to create client: %v", cerr)
+		log.Fatal().Msgf("Failed to create client: %v", cerr)
 	}
 
 	// Fetch systems from the API
 	systems, err := entities.ListSystems(client)
 	if err != nil {
-		logger.Fatalf("Failed to list systems: %v", err)
+		log.Fatal().Msgf("Failed to list systems: %v", err)
 	}
 
 	// Store the fetched systems in the cache
 	client.CacheClient.Set("systems", systems, 0)
 
 	// Print the number of systems fetched
-	fmt.Printf("Number of systems fetched: %v\n", len(systems))
+	log.Info().Msgf("Number of systems fetched: %v", len(systems))
 
 	// Print the symbol of each system
 	for _, system := range systems {
-		fmt.Printf("System symbol: %v\n", system.Symbol)
+		log.Info().Msgf("System symbol: %v", system.Symbol)
 	}
 
 	// Retrieve the cached systems
@@ -49,6 +55,6 @@ func main() {
 	}
 
 	// Print the number of converted systems retrieved from the cache
-	fmt.Printf("Number of converted systems retrieved from cache: %v\n", len(convertedSystems))
+	log.Info().Msgf("Number of converted systems retrieved from cache: %v", len(convertedSystems))
 
 }

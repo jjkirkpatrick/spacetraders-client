@@ -1,9 +1,9 @@
 package main
 
 import (
-	"log"
-	"os"
 	"time"
+
+	"github.com/phuslu/log"
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
@@ -12,11 +12,19 @@ import (
 
 func main() {
 	// Set up the logger to output to standard output with standard flags
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+	log.DefaultLogger = log.Logger{
+		Level:      log.InfoLevel,
+		Caller:     1,
+		TimeFormat: "15:04:05",
+		Writer: &log.ConsoleWriter{
+			ColorOutput:    true,
+			EndWithMessage: true,
+			Formatter:      client.Logformat,
+		},
+	}
 
 	// Initialize default client options and assign a logger
 	options := client.DefaultClientOptions()
-	options.Logger = logger
 
 	// Set the symbol and faction for the client
 	options.Symbol = "metrics-example"
@@ -26,7 +34,7 @@ func main() {
 	client, cerr := client.NewClient(options)
 	if cerr != nil {
 		// If client creation fails, log the error and exit
-		logger.Fatalf("Failed to create client: %v", cerr)
+		log.Fatal().Msgf("Failed to create client: %v", cerr)
 	}
 
 	// Configure the metrics client with InfluxDB details
@@ -42,7 +50,7 @@ func main() {
 
 	if err != nil {
 		// If retrieving the agent fails, log the error and exit
-		logger.Fatalf("Failed to get agent: %v", err)
+		log.Fatal().Msgf("Failed to get agent: %v", err)
 	}
 
 	// Build a metric for the agent's credits
