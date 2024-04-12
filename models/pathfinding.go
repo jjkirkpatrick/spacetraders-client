@@ -8,8 +8,9 @@ type PathfindingRoute struct {
 }
 
 type RouteStep struct {
-	Waypoint   string
-	FlightMode FlightMode
+	Waypoint     string
+	FlightMode   FlightMode
+	ShouldRefuel bool
 }
 
 type Edge struct {
