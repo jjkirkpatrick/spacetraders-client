@@ -3,7 +3,7 @@ package api
 import (
 	"fmt"
 
-	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
+	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
 // GetFunc is a function type that sends a GET request to the specified endpoint

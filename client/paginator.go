@@ -1,7 +1,7 @@
 package client
 
 import (
-	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
+	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
 // Paginator is a generic struct for pagination, where T is the type of data being paginated.

@@ -6,7 +6,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
+	"github.com/jjkirkpatrick/spacetraders-client/models"
+	"github.com/phuslu/log"
 )
 
 // RegisterRequest represents the request payload for registering a new agent
@@ -34,6 +35,8 @@ type TokenFile struct {
 
 // GetOrRegisterToken retrieves the token for the given symbol from the token file or registers a new agent if the token doesn't exist
 func (c *Client) getOrRegisterToken(faction, symbol, email string) error {
+	c.Logger.Debug().Msg("Attempting to get or register token")
+
 	if faction == "" || symbol == "" {
 		return fmt.Errorf("faction and symbol must be set")
 	}
@@ -53,7 +56,7 @@ func (c *Client) getOrRegisterToken(faction, symbol, email string) error {
 	// Check if a token exists for the given symbol
 	token, err := c.getTokenFromFile(symbol)
 	if err != nil {
-		fmt.Println("Error getting token from file:", err)
+		log.Error().Err(err).Msg("Failed to get token from file")
 		return err
 	}
 
@@ -71,6 +74,8 @@ func (c *Client) getOrRegisterToken(faction, symbol, email string) error {
 	}
 
 	var registerResp RegisterResponse
+
+	c.Logger.Trace().Msgf("Requesting token with symbol: %s, faction: %s", symbol, faction)
 	apiErr := c.Post("/register", registerReq, nil, &registerResp)
 	if apiErr != nil {
 		return apiErr
@@ -118,7 +123,7 @@ func (c *Client) getTokenFromFile(symbol string) (string, error) {
 
 // updateTokenFile updates the token file with the new token for the given symbol
 func (c *Client) updateTokenFile(symbol, token string) error {
-	fmt.Println("Updating token file with new token for symbol", symbol)
+	log.Debug().Msgf("Updating token file with new token for symbol %s", symbol)
 
 	// Read the current contents of the file
 	fileContent, err := ioutil.ReadFile("tokens.json")

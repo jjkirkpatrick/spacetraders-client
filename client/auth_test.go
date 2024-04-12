@@ -26,7 +26,6 @@ func TestGetOrRegisterToken(t *testing.T) {
 		retryDelay:      options.RetryDelay,
 		MetricsReporter: &metrics.NoOpMetricsReporter{},
 		CacheClient:     cache.NewCache(),
-		logger:          options.Logger,
 	}
 
 	// Test for valid faction and symbol
@@ -63,7 +62,6 @@ func TestTokenFileOperations(t *testing.T) {
 		retryDelay:      options.RetryDelay,
 		MetricsReporter: &metrics.NoOpMetricsReporter{},
 		CacheClient:     cache.NewCache(),
-		logger:          options.Logger,
 	}
 
 	// Ensure token file is clean before tests

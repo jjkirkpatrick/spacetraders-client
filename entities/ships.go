@@ -2,15 +2,18 @@ package entities
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/internal/api"
-	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
+	"github.com/jjkirkpatrick/spacetraders-client/models"
+	"github.com/phuslu/log"
 )
 
 type Ship struct {
 	models.Ship
 	client *client.Client
+	Graph  models.Graph
 }
 
 func ListShips(c *client.Client) ([]*Ship, error) {
@@ -26,13 +29,18 @@ func ListShips(c *client.Client) ([]*Ship, error) {
 				Ship:   *modelShip, // Directly embed the modelShip
 				client: c,
 			}
+			graph, err := convertedShip.buildGraph()
+			if err != nil {
+				return nil, models.Meta{}, err
+			}
+			convertedShip.Graph = *graph
 			convertedShips = append(convertedShips, convertedShip)
 		}
 
 		if err != nil {
 			if metaPtr == nil {
 				// Use default Meta values or handle accordingly
-				defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+				defaultMeta := models.Meta{Page: 1, Limit: 20, Total: 0}
 				metaPtr = &defaultMeta
 			}
 			return convertedShips, *metaPtr, err.AsError()
@@ -41,7 +49,7 @@ func ListShips(c *client.Client) ([]*Ship, error) {
 			// Store ships in cache
 			return convertedShips, *metaPtr, nil
 		} else {
-			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+			defaultMeta := models.Meta{Page: 1, Limit: 20, Total: 0}
 			return convertedShips, defaultMeta, nil
 		}
 	}
@@ -77,6 +85,12 @@ func PurchaseShip(c *client.Client, shipType string, waypoint string) (*models.A
 		Ship:   response.Data.Ship,
 		client: c,
 	}
+
+	graph, graphErr := shipEntity.buildGraph()
+	if graphErr != nil {
+		return nil, nil, nil, graphErr
+	}
+	shipEntity.Graph = *graph
 
 	c.CacheClient.Delete("all_ships")
 
@@ -142,15 +156,15 @@ func (s *Ship) Chart() (*models.Chart, *models.Waypoint, error) {
 	return &nav.Data.Chart, &nav.Data.Waypoint, nil
 }
 
-func (s *Ship) FetchCooldown() error {
+func (s *Ship) FetchCooldown() (*models.ShipCooldown, error) {
 	cooldown, err := api.GetShipCooldown(s.client.Get, s.Symbol)
 	if err != nil {
-		return err
+		return nil, err.AsError()
 	}
 
 	s.Cooldown = *cooldown
 
-	return nil
+	return cooldown, nil
 }
 
 func (s *Ship) Survey() ([]models.Survey, error) {
@@ -336,8 +350,10 @@ func (s *Ship) ScanWaypoints() (*models.ShipCooldown, []models.Waypoint, error) 
 
 func (s *Ship) Refuel(amount int, fromCargo bool) (*models.Agent, *models.FuelDetails, *models.Transaction, error) {
 	refuelRequest := &models.RefuelShipRequest{
-		Units:     amount,
 		FromCargo: fromCargo,
+	}
+	if amount != 0 {
+		refuelRequest.Units = amount
 	}
 	response, err := api.RefuelShip(s.client.Post, s.Symbol, refuelRequest)
 	if err != nil {
@@ -469,4 +485,156 @@ func (s *Ship) RepairShip() (*models.Ship, *models.Transaction, error) {
 	s.Ship = response.Data.Ship
 
 	return &response.Data.Ship, &response.Data.Transaction, nil
+}
+
+func (s *Ship) GetRouteToDestination(destination string) (*models.PathfindingRoute, error) {
+
+	log.Debug().Msgf("Getting route for ship %s", s.Symbol)
+
+	// Get current ship location
+	startLocation := s.Nav.WaypointSymbol
+	system, err := GetSystem(s.client, s.Nav.SystemSymbol)
+	if err != nil {
+		return nil, err
+	}
+
+	allWaypoints, _, aerr := system.ListWaypoints("", "")
+	if aerr != nil {
+		return nil, aerr
+	}
+
+	// Find the optimal route using Dijkstra's algorithm
+	steps, totalTime := api.FindOptimalRoute(s.Graph, allWaypoints, startLocation, destination, s.Fuel.Current, s.Fuel.Capacity)
+
+	return &models.PathfindingRoute{StartLocation: startLocation, EndLocation: destination, Steps: steps, TotalTime: totalTime}, nil
+}
+
+func (s *Ship) buildGraph() (*models.Graph, error) {
+	log.Debug().Msgf("Building graph for ship %s", s.Symbol)
+	// Attempt to retrieve the graph from cache first
+	cachedGraph, found := s.client.CacheClient.Get(s.Nav.SystemSymbol)
+	if found {
+		graph, ok := cachedGraph.(models.Graph)
+		if ok {
+			s.Graph = graph
+			return &graph, nil
+		}
+	}
+
+	graph := make(models.Graph)
+
+	var system *System
+	var allWaypoints []*models.Waypoint
+	var err error // Declare err variable outside of the else blocks to avoid shadowing
+
+	cachedSystem, found := s.client.CacheClient.Get("system_" + s.Nav.SystemSymbol)
+	if found {
+		system, _ = cachedSystem.(*System)
+	} else {
+		system, err = GetSystem(s.client, s.Nav.SystemSymbol) // Use = instead of := to avoid shadowing err
+		if err != nil {
+			return nil, err
+		}
+		s.client.CacheClient.Set("system_"+s.Nav.SystemSymbol, system, 0) // Assuming no expiration for simplicity
+	}
+
+	cachedWaypoints, found := s.client.CacheClient.Get("waypoints_" + s.Nav.SystemSymbol)
+	if found {
+		allWaypoints, _ = cachedWaypoints.([]*models.Waypoint)
+	} else {
+		allWaypoints, _, err = system.ListWaypoints("", "") // Use = instead of := to avoid shadowing err
+		if err != nil {
+			return nil, err
+		}
+		s.client.CacheClient.Set("waypoints_"+s.Nav.SystemSymbol, allWaypoints, 0) // Assuming no expiration for simplicity
+	}
+
+	for _, startWaypoint := range allWaypoints {
+		for _, endWaypoint := range allWaypoints {
+			if startWaypoint.Symbol == endWaypoint.Symbol {
+				continue
+			}
+
+			distance := CalculateDistanceBetweenWaypoints(startWaypoint.X, startWaypoint.Y, endWaypoint.X, endWaypoint.Y)
+
+			for _, flightMode := range []models.FlightMode{models.FlightModeDrift, models.FlightModeCruise, models.FlightModeBurn} {
+				if s.IsWithinRange(distance) {
+					fuelRequired := s.CalculateFuelRequired(distance)
+					travelTime := s.CalculateTravelTime(distance)
+
+					if _, ok := graph[startWaypoint.Symbol]; !ok {
+						graph[startWaypoint.Symbol] = make(map[string]map[models.FlightMode]*models.Edge)
+					}
+					if _, ok := graph[startWaypoint.Symbol][endWaypoint.Symbol]; !ok {
+						graph[startWaypoint.Symbol][endWaypoint.Symbol] = make(map[models.FlightMode]*models.Edge)
+					}
+
+					graph[startWaypoint.Symbol][endWaypoint.Symbol][flightMode] = &models.Edge{
+						Distance:     distance,
+						FuelRequired: fuelRequired,
+						TravelTime:   travelTime,
+					}
+				}
+			}
+		}
+	}
+
+	s.Graph = graph
+	// Cache the newly built graph
+	s.client.CacheClient.Set(s.Nav.SystemSymbol, graph, 0) // Assuming no expiration for simplicity
+
+	return &graph, nil
+}
+
+//Utility functions
+
+// Calculate if the ship is within range of a given distance
+func (s *Ship) IsWithinRange(distance float64) bool {
+	var fuelCost float64
+	switch s.Nav.FlightMode {
+	case models.FlightModeCruise:
+		fuelCost = math.Round(distance)
+	case models.FlightModeDrift:
+		fuelCost = 1
+	case models.FlightModeBurn:
+		fuelCost = math.Max(2, 2*math.Round(distance))
+	default:
+		fuelCost = math.Round(distance) // Default to CRUISE mode if flight mode is unknown
+	}
+	return int(fuelCost) <= s.Fuel.Capacity
+}
+
+// Calculate the fuel required to travel a given distance
+func (s *Ship) CalculateFuelRequired(distance float64) int {
+	var fuel float64
+	switch s.Nav.FlightMode {
+	case models.FlightModeDrift:
+		fuel = 1 // Drift mode always incurs a cost of 1
+	case models.FlightModeCruise:
+		fuel = math.Round(distance) // Cruise mode rounds the distance
+	case models.FlightModeBurn:
+		fuel = math.Max(2, 2*math.Round(distance)) // Burn mode doubles the rounded distance, minimum cost of 2
+	default:
+		fuel = math.Round(distance) // Default to rounding the distance if flight mode is unknown
+	}
+
+	return int(fuel)
+}
+
+// Calculate the travel time for a given distance
+func (s *Ship) CalculateTravelTime(distance float64) int {
+	var multiplier float64
+	switch s.Nav.FlightMode {
+	case models.FlightModeCruise:
+		multiplier = 25
+	case models.FlightModeDrift:
+		multiplier = 250
+	case models.FlightModeBurn:
+		multiplier = 12.5
+	default:
+		multiplier = 25 // Default to Cruise mode if flight mode is unknown
+	}
+
+	travelTime := math.Round(math.Round(math.Max(1, distance))*(multiplier/float64(s.Engine.Speed)) + 15)
+	return int(travelTime)
 }

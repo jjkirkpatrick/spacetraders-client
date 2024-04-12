@@ -3,7 +3,7 @@ package entities
 import (
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/internal/api"
-	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
+	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
 type Agent struct {
@@ -28,7 +28,7 @@ func ListPublicAgents(c *client.Client) ([]*Agent, error) {
 		if err != nil {
 			if metaPtr == nil {
 				// Use default Meta values or handle accordingly
-				defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+				defaultMeta := models.Meta{Page: 1, Limit: 20, Total: 0}
 				metaPtr = &defaultMeta
 			}
 			return convertedAgents, *metaPtr, err.AsError()
@@ -36,7 +36,7 @@ func ListPublicAgents(c *client.Client) ([]*Agent, error) {
 		if metaPtr != nil {
 			return convertedAgents, *metaPtr, nil
 		} else {
-			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+			defaultMeta := models.Meta{Page: 1, Limit: 20, Total: 0}
 			return convertedAgents, defaultMeta, nil
 		}
 	}

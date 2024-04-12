@@ -3,7 +3,7 @@ package api
 import (
 	"fmt"
 
-	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
+	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
 type listSystemsResponse struct {
@@ -62,6 +62,7 @@ func ListWaypointsInSystem(get GetFunc, meta *models.Meta, systemSymbol string, 
 		"page":  fmt.Sprintf("%d", meta.Page),
 		"limit": fmt.Sprintf("%d", meta.Limit),
 	}
+
 	if trait != "" {
 		queryParams["traits"] = string(trait)
 	}

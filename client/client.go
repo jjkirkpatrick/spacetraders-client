@@ -4,16 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jjkirkpatrick/spacetraders-client/internal/cache"
 	"github.com/jjkirkpatrick/spacetraders-client/internal/metrics"
-	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
+	"github.com/jjkirkpatrick/spacetraders-client/models"
+	"github.com/phuslu/log"
 	"golang.org/x/time/rate"
 )
 
@@ -27,7 +26,7 @@ type Client struct {
 	retryDelay      time.Duration
 	MetricsReporter metrics.MetricsReporter
 	CacheClient     *cache.Cache
-	logger          *log.Logger
+	Logger          *log.Logger
 }
 
 // ClientOptions represents the configuration options for the SpaceTraders API client
@@ -38,8 +37,8 @@ type ClientOptions struct {
 	Email             string
 	RequestsPerSecond float32
 	RetryCount        int
+	LogLevel          log.Level
 	RetryDelay        time.Duration
-	Logger            *log.Logger
 }
 
 // DefaultClientOptions returns the default configuration options for the SpaceTraders API client
@@ -47,11 +46,21 @@ func DefaultClientOptions() ClientOptions {
 	return ClientOptions{
 		BaseURL:           "https://api.spacetraders.io/v2",
 		RetryCount:        3,
-		Logger:            log.New(os.Stdout, "", log.LstdFlags),
 		RequestsPerSecond: 2,
 		RetryDelay:        1 * time.Second,
 	}
 }
+
+type Glog struct {
+	Logger log.Logger
+}
+
+var glog = &Glog{log.Logger{
+	Level:      log.InfoLevel,
+	Caller:     1,
+	TimeFormat: "15:04:05.999999",
+	Writer:     &log.ConsoleWriter{ColorOutput: true, Formatter: Logformat},
+}}
 
 // NewClient creates a new instance of the SpaceTraders API client
 func NewClient(options ClientOptions) (*Client, error) {
@@ -67,8 +76,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 		retryDelay:      options.RetryDelay,
 		MetricsReporter: &metrics.NoOpMetricsReporter{},
 		CacheClient:     cache.NewCache(),
-		logger:          options.Logger,
+		Logger:          &glog.Logger,
 	}
+
+	client.Logger.SetLevel(options.LogLevel)
 
 	err := client.getOrRegisterToken(options.Faction, options.Symbol, options.Email)
 
@@ -76,10 +87,9 @@ func NewClient(options ClientOptions) (*Client, error) {
 		return nil, err
 	}
 
-	fmt.Println("Setting rate limiter")
-
 	client.httpClient.SetRateLimiter(rate.NewLimiter(rate.Limit(options.RequestsPerSecond), 10))
 
+	client.Logger.Debug().Msgf("New SpaceTraders client initialized with baseURL: %s, retryCount: %d, rateLimit: %f requests/second", client.baseURL, client.retryCount, options.RequestsPerSecond)
 	return client, nil
 }
 
@@ -137,6 +147,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 
 	backoff := c.retryDelay
 	for i := 0; i <= c.retryCount; i++ {
+		c.Logger.Trace().Msgf("Sending request: %s %s", method, c.baseURL+endpoint)
 		resp, err = request.Execute(method, c.baseURL+endpoint)
 		metric, _ := metrics.NewMetricBuilder().
 			Namespace("api_request").
@@ -153,7 +164,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 
 		if resp.IsError() {
 			if isRateLimitError(resp.StatusCode()) {
-				handleRateLimit(resp, c.logger)
+				handleRateLimit(resp, c.Logger)
 				metric, _ := metrics.NewMetricBuilder().
 					Namespace("api_request_error").
 					Tag("method", method).
@@ -220,7 +231,7 @@ func handleRateLimit(resp *resty.Response, logger *log.Logger) {
 	if resetTime != "" {
 		if resetTimestamp, parseErr := strconv.ParseInt(resetTime, 10, 64); parseErr == nil {
 			waitDuration := time.Until(time.Unix(resetTimestamp, 0))
-			logger.Printf("Rate limit exceeded. Waiting until reset: %v", waitDuration)
+			logger.Debug().Msgf("Rate limit exceeded. Waiting until reset: %v", waitDuration)
 			time.Sleep(waitDuration)
 		}
 	}
@@ -232,6 +243,7 @@ func parseAPIError(resp *resty.Response) *models.APIError {
 		Error models.APIError `json:"error"`
 	}
 	err := json.Unmarshal(resp.Body(), &errorWrapper)
+
 	if err != nil {
 		return &models.APIError{Message: "failed to parse API error response", Code: resp.StatusCode()}
 	}

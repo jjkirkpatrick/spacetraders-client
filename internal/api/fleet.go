@@ -3,7 +3,7 @@ package api
 import (
 	"fmt"
 
-	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
+	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
 func ListShips(get GetFunc, meta *models.Meta) ([]*models.Ship, *models.Meta, *models.APIError) {

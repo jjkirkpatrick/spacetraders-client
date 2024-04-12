@@ -3,7 +3,7 @@ package entities
 import (
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/internal/api"
-	"github.com/jjkirkpatrick/spacetraders-client/internal/models"
+	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
 type Contract struct {
@@ -28,7 +28,7 @@ func ListContracts(c *client.Client) ([]*Contract, error) {
 		if err != nil {
 			if metaPtr == nil {
 				// Use default Meta values or handle accordingly
-				defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+				defaultMeta := models.Meta{Page: 1, Limit: 20, Total: 0}
 				metaPtr = &defaultMeta
 			}
 			return convertedContracts, *metaPtr, err.AsError()
@@ -36,7 +36,7 @@ func ListContracts(c *client.Client) ([]*Contract, error) {
 		if metaPtr != nil {
 			return convertedContracts, *metaPtr, nil
 		} else {
-			defaultMeta := models.Meta{Page: 1, Limit: 25, Total: 0}
+			defaultMeta := models.Meta{Page: 1, Limit: 20, Total: 0}
 			return convertedContracts, defaultMeta, nil
 		}
 	}
@@ -57,16 +57,16 @@ func GetContract(c *client.Client, symbol string) (*Contract, error) {
 	return contractEntity, nil
 }
 
-func (c *Contract) Accept() (*models.Agent, *models.Contract, error) {
+func (c *Contract) Accept() (*Agent, *Contract, error) {
 	agent, contract, err := api.AcceptContract(c.client.Post, c.Contract.ID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return agent, contract, nil
+	return &Agent{Agent: *agent, client: c.client}, &Contract{Contract: *contract, client: c.client}, nil
 }
 
-func (c *Contract) DeliverCargo(shop Ship, tradeGood models.GoodSymbol, units int) (*models.Contract, *models.Cargo, error) {
+func (c *Contract) DeliverCargo(shop Ship, tradeGood models.GoodSymbol, units int) (*Contract, *models.Cargo, error) {
 
 	contractRequest := models.DeliverContractCargoRequest{
 		ShipSymbol:  shop.Symbol,
@@ -79,7 +79,7 @@ func (c *Contract) DeliverCargo(shop Ship, tradeGood models.GoodSymbol, units in
 		return nil, nil, err
 	}
 
-	return agent, cargo, nil
+	return &Contract{Contract: *agent, client: c.client}, cargo, nil
 }
 
 func (c *Contract) Fulfill() (*models.Agent, *models.Contract, error) {
