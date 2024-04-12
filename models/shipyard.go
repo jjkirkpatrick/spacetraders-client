@@ -31,6 +31,9 @@ type Transaction struct {
 	WaypointSymbol string `json:"waypointSymbol"`
 	ShipSymbol     string `json:"shipSymbol"`
 	TradeSymbol    string `json:"tradeSymbol"`
+	ShipType       string `json:"shipType"`
+	Price          int    `json:"price"`
+	AgentSymbol    string `json:"agentSymbol"`
 	Type           string `json:"type" enum:"PURCHASE,SELL"`
 	Units          int    `json:"units"`
 	PricePerUnit   int    `json:"pricePerUnit"`

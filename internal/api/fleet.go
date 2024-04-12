@@ -26,7 +26,7 @@ func ListShips(get GetFunc, meta *models.Meta) ([]*models.Ship, *models.Meta, *m
 
 // PurchaseShip allows the user to purchase a new models.Ship
 func PurchaseShip(post PostFunc, payload *models.PurchaseShipRequest) (*models.PurchaseShipResponse, *models.APIError) {
-	endpoint := "/my/Ships"
+	endpoint := "/my/ships"
 
 	var response models.PurchaseShipResponse
 
@@ -40,7 +40,7 @@ func PurchaseShip(post PostFunc, payload *models.PurchaseShipRequest) (*models.P
 
 // GetShip retrieves the details of a specific models.Ship
 func GetShip(get GetFunc, ShipSymbol string) (*models.Ship, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s", ShipSymbol)
 
 	var response struct {
 		Data models.Ship `json:"data"`
@@ -56,7 +56,7 @@ func GetShip(get GetFunc, ShipSymbol string) (*models.Ship, *models.APIError) {
 
 // GetShipCargo retrieves the cargo details of a specific models.Ship
 func GetShipCargo(get GetFunc, ShipSymbol string) (*models.Cargo, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/cargo", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/cargo", ShipSymbol)
 
 	var response struct {
 		Data *models.Cargo `json:"data"`
@@ -72,10 +72,11 @@ func GetShipCargo(get GetFunc, ShipSymbol string) (*models.Cargo, *models.APIErr
 
 // OrbitShip allows a models.Ship to orbit a celestial body
 func OrbitShip(post PostFunc, ShipSymbol string) (*models.ShipNav, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/orbit", ShipSymbol)
-
+	endpoint := fmt.Sprintf("/my/ships/%s/orbit", ShipSymbol)
 	var response struct {
-		Data models.ShipNav `json:"data"`
+		Data struct {
+			Nav models.ShipNav `json:"nav"`
+		} `json:"data"`
 	}
 
 	err := post(endpoint, nil, nil, &response)
@@ -83,12 +84,12 @@ func OrbitShip(post PostFunc, ShipSymbol string) (*models.ShipNav, *models.APIEr
 		return nil, err
 	}
 
-	return &response.Data, nil
+	return &response.Data.Nav, nil
 }
 
 // ShipRefine initiates the refining process for a models.Ship
 func ShipRefine(post PostFunc, ShipSymbol string, payload *models.RefineRequest) (*models.ShipRefineResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/refine", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/refine", ShipSymbol)
 
 	var response models.ShipRefineResponse
 
@@ -102,7 +103,7 @@ func ShipRefine(post PostFunc, ShipSymbol string, payload *models.RefineRequest)
 
 // CreateChart creates a navigation chart for a models.Ship
 func CreateChart(post PostFunc, ShipSymbol string) (*models.CreateChartResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/chart", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/chart", ShipSymbol)
 
 	var response models.CreateChartResponse
 
@@ -116,7 +117,7 @@ func CreateChart(post PostFunc, ShipSymbol string) (*models.CreateChartResponse,
 
 // GetShipCooldown retrieves the cooldown details of a specific models.Ship
 func GetShipCooldown(get GetFunc, ShipSymbol string) (*models.ShipCooldown, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/cooldown", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/cooldown", ShipSymbol)
 
 	var response struct {
 		Data models.ShipCooldown `json:"data"`
@@ -132,10 +133,12 @@ func GetShipCooldown(get GetFunc, ShipSymbol string) (*models.ShipCooldown, *mod
 
 // DockShip allows a models.Ship to dock at a station or planet
 func DockShip(post PostFunc, ShipSymbol string) (*models.ShipNav, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/dock", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/dock", ShipSymbol)
 
 	var response struct {
-		Data models.ShipNav `json:"data"`
+		Data struct {
+			Nav models.ShipNav `json:"nav"`
+		} `json:"Data"`
 	}
 
 	err := post(endpoint, nil, nil, &response)
@@ -143,12 +146,12 @@ func DockShip(post PostFunc, ShipSymbol string) (*models.ShipNav, *models.APIErr
 		return nil, err
 	}
 
-	return &response.Data, nil
+	return &response.Data.Nav, nil
 }
 
 // CreateSurvey initiates a survey process for a models.Ship
 func CreateSurvey(post PostFunc, ShipSymbol string) (*models.CreateSurveyResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/survey", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/survey", ShipSymbol)
 
 	var response models.CreateSurveyResponse
 
@@ -162,7 +165,7 @@ func CreateSurvey(post PostFunc, ShipSymbol string) (*models.CreateSurveyRespons
 
 // ExtractResources initiates the resource extraction process for a models.Ship
 func ExtractResources(post PostFunc, ShipSymbol string) (*models.ExtractionResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/extract", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/extract", ShipSymbol)
 
 	var response models.ExtractionResponse
 
@@ -176,7 +179,7 @@ func ExtractResources(post PostFunc, ShipSymbol string) (*models.ExtractionRespo
 
 // SiphonResources initiates the resource siphoning process for a models.Ship
 func SiphonResources(post PostFunc, ShipSymbol string) (*models.SiphonResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/siphon", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/siphon", ShipSymbol)
 
 	var response models.SiphonResponse
 
@@ -190,7 +193,7 @@ func SiphonResources(post PostFunc, ShipSymbol string) (*models.SiphonResponse, 
 
 // ExtractResourcesWithSurvey initiates the resource extraction process with a prior survey for a models.Ship
 func ExtractResourcesWithSurvey(post PostFunc, ShipSymbol string, payload *models.ExtractWithSurveyRequest) (*models.ExtractionResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/extract/survey", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/extract/survey", ShipSymbol)
 
 	var response models.ExtractionResponse
 
@@ -204,7 +207,7 @@ func ExtractResourcesWithSurvey(post PostFunc, ShipSymbol string, payload *model
 
 // JettisonCargo allows a models.Ship to jettison cargo into space
 func JettisonCargo(post PostFunc, ShipSymbol string, payload *models.JettisonRequest) (*models.JettisonResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/jettison", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/jettison", ShipSymbol)
 
 	var response models.JettisonResponse
 
@@ -218,7 +221,7 @@ func JettisonCargo(post PostFunc, ShipSymbol string, payload *models.JettisonReq
 
 // JumpShip initiates a jump for a models.Ship to another system
 func JumpShip(post PostFunc, ShipSymbol string, payload *models.JumpShipRequest) (*models.JumpShipResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/jump", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/jump", ShipSymbol)
 
 	var response models.JumpShipResponse
 
@@ -232,7 +235,7 @@ func JumpShip(post PostFunc, ShipSymbol string, payload *models.JumpShipRequest)
 
 // NavigateShip initiates navigation for a models.Ship to a waypoint
 func NavigateShip(post PostFunc, ShipSymbol string, payload *models.NavigateRequest) (*models.NavigateResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/navigate", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/navigate", ShipSymbol)
 
 	var response models.NavigateResponse
 	err := post(endpoint, payload, nil, &response)
@@ -244,10 +247,10 @@ func NavigateShip(post PostFunc, ShipSymbol string, payload *models.NavigateRequ
 }
 
 // PatchShipNav updates the navigation details of a models.Ship
-func PatchShipNav(patch PatchFunc, ShipSymbol string, payload *models.NavUpdateRequest) (*models.PatchShipNacResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/nav", ShipSymbol)
+func PatchShipNav(patch PatchFunc, ShipSymbol string, payload *models.NavUpdateRequest) (*models.PatchShipNavResponse, *models.APIError) {
+	endpoint := fmt.Sprintf("/my/ships/%s/nav", ShipSymbol)
 
-	var response models.PatchShipNacResponse
+	var response models.PatchShipNavResponse
 
 	err := patch(endpoint, payload, nil, &response)
 	if err != nil {
@@ -259,7 +262,7 @@ func PatchShipNav(patch PatchFunc, ShipSymbol string, payload *models.NavUpdateR
 
 // GetShipNav retrieves the navigation details of a specific models.Ship
 func GetShipNav(get GetFunc, ShipSymbol string) (*models.ShipNav, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/nav", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/nav", ShipSymbol)
 
 	var response models.ShipNav
 
@@ -273,7 +276,7 @@ func GetShipNav(get GetFunc, ShipSymbol string) (*models.ShipNav, *models.APIErr
 
 // WarpShip initiates a warp for a models.Ship to another system
 func WarpShip(post PostFunc, ShipSymbol string, payload *models.WarpRequest) (*models.WarpResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/warp", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/warp", ShipSymbol)
 
 	var response models.WarpResponse
 
@@ -287,7 +290,7 @@ func WarpShip(post PostFunc, ShipSymbol string, payload *models.WarpRequest) (*m
 
 // SellCargo sells cargo from a models.Ship's inventory
 func SellCargo(post PostFunc, ShipSymbol string, payload *models.SellCargoRequest) (*models.SellCargoResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/sell", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/sell", ShipSymbol)
 
 	var response models.SellCargoResponse
 
@@ -301,7 +304,7 @@ func SellCargo(post PostFunc, ShipSymbol string, payload *models.SellCargoReques
 
 // ScanSystems scans for systems within range
 func ScanSystems(post PostFunc, ShipSymbol string) (*models.ScanSystemsResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/scan/systems", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/scan/systems", ShipSymbol)
 
 	var response models.ScanSystemsResponse
 
@@ -315,7 +318,7 @@ func ScanSystems(post PostFunc, ShipSymbol string) (*models.ScanSystemsResponse,
 
 // ScanWaypoints scans for waypoints within a system
 func ScanWaypoints(post PostFunc, ShipSymbol string) (*models.ScanWaypointsResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/scan/waypoints", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/scan/waypoints", ShipSymbol)
 
 	var response models.ScanWaypointsResponse
 
@@ -329,7 +332,7 @@ func ScanWaypoints(post PostFunc, ShipSymbol string) (*models.ScanWaypointsRespo
 
 // ScanShips scans for models.Ships within range
 func ScanShips(post PostFunc, ShipSymbol string) (*models.ScanShipsResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/scan/Ships", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/scan/Ships", ShipSymbol)
 
 	var response models.ScanShipsResponse
 
@@ -343,7 +346,7 @@ func ScanShips(post PostFunc, ShipSymbol string) (*models.ScanShipsResponse, *mo
 
 // RefuelShip refuels a models.Ship
 func RefuelShip(post PostFunc, ShipSymbol string, payload *models.RefuelShipRequest) (*models.RefuelShipResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/refuel", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/refuel", ShipSymbol)
 
 	var response models.RefuelShipResponse
 	var err *models.APIError
@@ -363,7 +366,7 @@ func RefuelShip(post PostFunc, ShipSymbol string, payload *models.RefuelShipRequ
 
 // PurchaseCargo purchases cargo for a models.Ship
 func PurchaseCargo(post PostFunc, ShipSymbol string, payload *models.PurchaseCargoRequest) (*models.PurchaseCargoResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/purchase", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/purchase", ShipSymbol)
 
 	var response models.PurchaseCargoResponse
 
@@ -377,7 +380,7 @@ func PurchaseCargo(post PostFunc, ShipSymbol string, payload *models.PurchaseCar
 
 // TransferCargo transfers cargo between models.Ships or to a waypoint
 func TransferCargo(post PostFunc, ShipSymbol string, payload *models.TransferCargoRequest) (*models.TransferCargoResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/transfer", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/transfer", ShipSymbol)
 
 	var response models.TransferCargoResponse
 
@@ -391,7 +394,7 @@ func TransferCargo(post PostFunc, ShipSymbol string, payload *models.TransferCar
 
 // NegotiateContract negotiates a contract for a models.Ship
 func NegotiateContract(post PostFunc, ShipSymbol string) (*models.NegotiateContractResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/negotiate/contract", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/negotiate/contract", ShipSymbol)
 
 	var response models.NegotiateContractResponse
 
@@ -405,7 +408,7 @@ func NegotiateContract(post PostFunc, ShipSymbol string) (*models.NegotiateContr
 
 // GetMounts retrieves the mounts of a specific models.Ship
 func GetMounts(get GetFunc, ShipSymbol string) (*models.GetMountsResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/mounts", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/mounts", ShipSymbol)
 
 	var response models.GetMountsResponse
 
@@ -419,7 +422,7 @@ func GetMounts(get GetFunc, ShipSymbol string) (*models.GetMountsResponse, *mode
 
 // InstallMount installs a mount on a models.Ship
 func InstallMount(post PostFunc, ShipSymbol string, payload *models.InstallMountRequest) (*models.InstallMountResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/mounts/install", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/mounts/install", ShipSymbol)
 
 	var response models.InstallMountResponse
 
@@ -433,7 +436,7 @@ func InstallMount(post PostFunc, ShipSymbol string, payload *models.InstallMount
 
 // RemoveMount removes a mount from a models.Ship
 func RemoveMount(post PostFunc, ShipSymbol string, payload *models.RemoveMountRequest) (*models.RemoveMountResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/mounts/remove", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/mounts/remove", ShipSymbol)
 
 	var response models.RemoveMountResponse
 
@@ -447,7 +450,7 @@ func RemoveMount(post PostFunc, ShipSymbol string, payload *models.RemoveMountRe
 
 // GetScrapShip retrieves the scrap value of a specific models.Ship
 func GetScrapShip(get GetFunc, ShipSymbol string) (*models.GetScrapShipResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/scrap", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/scrap", ShipSymbol)
 
 	var response models.GetScrapShipResponse
 
@@ -461,7 +464,7 @@ func GetScrapShip(get GetFunc, ShipSymbol string) (*models.GetScrapShipResponse,
 
 // ScrapShip scraps a models.Ship
 func ScrapShip(post PostFunc, ShipSymbol string) (*models.ScrapShipResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/scrap", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/scrap", ShipSymbol)
 
 	var response models.ScrapShipResponse
 
@@ -475,7 +478,7 @@ func ScrapShip(post PostFunc, ShipSymbol string) (*models.ScrapShipResponse, *mo
 
 // GetRepairShip retrieves the repair details of a specific models.Ship
 func GetRepairShip(get GetFunc, ShipSymbol string) (*models.GetRepairShipResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/repair", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/repair", ShipSymbol)
 
 	var response models.GetRepairShipResponse
 
@@ -489,7 +492,7 @@ func GetRepairShip(get GetFunc, ShipSymbol string) (*models.GetRepairShipRespons
 
 // RepairShip repairs a models.Ship
 func RepairShip(post PostFunc, ShipSymbol string) (*models.RepairShipResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/Ships/%s/repair", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/repair", ShipSymbol)
 
 	var response models.RepairShipResponse
 

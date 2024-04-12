@@ -6,14 +6,16 @@ import (
 	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
+type listSystemsResponse struct {
+	Data []*models.System `json:"data"`
+	Meta models.Meta      `json:"meta"`
+}
+
 // ListSystems retrieves a list of systems
-func ListSystems(get GetFunc, meta *models.Meta) ([]*models.ListSystemsResponse, *models.Meta, *models.APIError) {
+func ListSystems(get GetFunc, meta *models.Meta) ([]*models.System, *models.Meta, *models.APIError) {
 	endpoint := "/systems"
 
-	var response struct {
-		Data []*models.ListSystemsResponse `json:"data"`
-		Meta models.Meta                   `json:"meta"`
-	}
+	var response listSystemsResponse
 
 	queryParams := map[string]string{
 		"page":  fmt.Sprintf("%d", meta.Page),
@@ -28,33 +30,39 @@ func ListSystems(get GetFunc, meta *models.Meta) ([]*models.ListSystemsResponse,
 	return response.Data, &response.Meta, nil
 }
 
+type getSystemResponse struct {
+	Data models.System `json:"data"`
+	Meta models.Meta   `json:"meta"`
+}
+
 // GetSystem retrieves the details of a specific system
-func GetSystem(get GetFunc, systemSymbol string) (*models.GetSystemResponse, *models.APIError) {
+func GetSystem(get GetFunc, systemSymbol string) (*models.System, *models.APIError) {
 	endpoint := fmt.Sprintf("/systems/%s", systemSymbol)
 
-	var response models.GetSystemResponse
+	var response getSystemResponse
 
 	err := get(endpoint, nil, &response)
 	if err != nil {
 		return nil, err
 	}
 
-	return &response, nil
+	return &response.Data, nil
 }
 
 // ListWaypointsInSystem retrieves a list of waypoints in a specific system
-func ListWaypointsInSystem(get GetFunc, meta *models.Meta, systemSymbol string, trait models.WaypointTrait, waypointType models.WaypointType) ([]*models.ListWaypointsResponse, *models.Meta, *models.APIError) {
+func ListWaypointsInSystem(get GetFunc, meta *models.Meta, systemSymbol string, trait models.WaypointTrait, waypointType models.WaypointType) ([]*models.Waypoint, *models.Meta, *models.APIError) {
 	endpoint := fmt.Sprintf("/systems/%s/waypoints", systemSymbol)
 
 	var response struct {
-		Data []*models.ListWaypointsResponse `json:"data"`
-		Meta models.Meta                     `json:"meta"`
+		Data []*models.Waypoint `json:"data"`
+		Meta models.Meta        `json:"meta"`
 	}
 
 	queryParams := map[string]string{
 		"page":  fmt.Sprintf("%d", meta.Page),
 		"limit": fmt.Sprintf("%d", meta.Limit),
 	}
+
 	if trait != "" {
 		queryParams["traits"] = string(trait)
 	}
@@ -72,51 +80,63 @@ func ListWaypointsInSystem(get GetFunc, meta *models.Meta, systemSymbol string, 
 }
 
 // GetWaypoint retrieves the details of a specific waypoint
-func GetWaypoint(get GetFunc, systemSymbol, waypointSymbol string) (*models.GetWaypointResponse, *models.APIError) {
+func GetWaypoint(get GetFunc, systemSymbol, waypointSymbol string) (*models.Waypoint, *models.APIError) {
 	endpoint := fmt.Sprintf("/systems/%s/waypoints/%s", systemSymbol, waypointSymbol)
 
-	var response models.GetWaypointResponse
+	var response struct {
+		Data models.Waypoint `json:"data"`
+		Meta models.Meta     `json:"meta"`
+	}
 	err := get(endpoint, nil, &response)
 	if err != nil {
 		return nil, err
 	}
 
-	return &response, nil
+	return &response.Data, nil
 }
 
 // GetMarket retrieves the market details of a specific waypoint
-func GetMarket(get GetFunc, systemSymbol, waypointSymbol string) (*models.GetMarketResponse, *models.APIError) {
+func GetMarket(get GetFunc, systemSymbol, waypointSymbol string) (*models.Market, *models.APIError) {
 	endpoint := fmt.Sprintf("/systems/%s/waypoints/%s/market", systemSymbol, waypointSymbol)
 
-	var response models.GetMarketResponse
+	var response struct {
+		Data models.Market `json:"data"`
+		Meta models.Meta   `json:"meta"`
+	}
 
 	err := get(endpoint, nil, &response)
 	if err != nil {
 		return nil, err
 	}
 
-	return &response, nil
+	return &response.Data, nil
 }
 
 // GetShipyard retrieves the shipyard details of a specific waypoint
-func GetShipyard(get GetFunc, systemSymbol, waypointSymbol string) (*models.GetShipyardResponse, *models.APIError) {
+func GetShipyard(get GetFunc, systemSymbol, waypointSymbol string) (*models.Shipyard, *models.APIError) {
 	endpoint := fmt.Sprintf("/systems/%s/waypoints/%s/shipyard", systemSymbol, waypointSymbol)
 
-	var response models.GetShipyardResponse
+	var response struct {
+		Data models.Shipyard `json:"data"`
+		Meta models.Meta     `json:"meta"`
+	}
 
 	err := get(endpoint, nil, &response)
 	if err != nil {
 		return nil, err
 	}
 
-	return &response, nil
+	return &response.Data, nil
 }
 
 // GetJumpGate retrieves the jump gate details of a specific waypoint
-func GetJumpGate(get GetFunc, systemSymbol, waypointSymbol string) (*models.GetJumpGatesResponse, *models.APIError) {
+func GetJumpGate(get GetFunc, systemSymbol, waypointSymbol string) (*models.JumpGate, *models.APIError) {
 	endpoint := fmt.Sprintf("/systems/%s/waypoints/%s/jump-gate", systemSymbol, waypointSymbol)
 
-	var response models.GetJumpGatesResponse
+	var response struct {
+		Data models.JumpGate `json:"data"`
+		Meta models.Meta     `json:"meta"`
+	}
 
 	err := get(endpoint, nil, &response)
 	if err != nil {
@@ -124,30 +144,33 @@ func GetJumpGate(get GetFunc, systemSymbol, waypointSymbol string) (*models.GetJ
 		return nil, apiErr
 	}
 
-	return &response, nil
+	return &response.Data, nil
 }
 
 // GetConstructionSite retrieves the construction site details of a specific waypoint
-func GetConstructionSite(get GetFunc, systemSymbol, waypointSymbol string) (*models.GetConstructionSitesResponse, *models.APIError) {
+func GetConstructionSite(get GetFunc, systemSymbol, waypointSymbol string) (*models.ConstructionSite, *models.APIError) {
 	endpoint := fmt.Sprintf("/systems/%s/waypoints/%s/construction", systemSymbol, waypointSymbol)
 
-	var response models.GetConstructionSitesResponse
+	var response struct {
+		Data models.ConstructionSite `json:"data"`
+		Meta models.Meta             `json:"meta"`
+	}
 
 	err := get(endpoint, nil, &response)
 	if err != nil {
 		return nil, err
 	}
 
-	return &response, nil
+	return &response.Data, nil
 }
 
 // SupplyConstructionSite supplies a construction site with the required materials
-func SupplyConstructionSite(post PostFunc, systemSymbol, waypointSymbol string, payload interface{}) (*models.SupplyConstructionSiteResponse, *models.APIError) {
+func SupplyConstructionSite(post PostFunc, systemSymbol, waypointSymbol string, request models.SupplyConstructionSiteRequest) (*models.SupplyConstructionSiteResponse, *models.APIError) {
 	endpoint := fmt.Sprintf("/systems/%s/waypoints/%s/construction/supply", systemSymbol, waypointSymbol)
 
 	var response models.SupplyConstructionSiteResponse
 
-	err := post(endpoint, payload, nil, &response)
+	err := post(endpoint, request, nil, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +179,7 @@ func SupplyConstructionSite(post PostFunc, systemSymbol, waypointSymbol string, 
 }
 
 func FindMarketsForGood(get GetFunc, systemSymbol string, goodSymbol string) ([]*models.Market, *models.APIError) {
-	var allWaypoints []*models.ListWaypointsResponse
+	var allWaypoints []*models.Waypoint
 	meta := &models.Meta{Page: 1, Limit: 20}
 	for {
 		waypoints, metaPtr, err := ListWaypointsInSystem(get, meta, systemSymbol, models.TraitMarketplace, "")
@@ -178,13 +201,13 @@ func FindMarketsForGood(get GetFunc, systemSymbol string, goodSymbol string) ([]
 			continue // Skip waypoints where we can't get market data
 		}
 
-		for _, good := range market.Data.Imports {
+		for _, good := range market.Imports {
 			if good.Symbol == models.GoodSymbol(goodSymbol) {
 				marketsBuyingGood = append(marketsBuyingGood, &models.Market{
 					Symbol:   waypoint.Symbol,
-					Exports:  market.Data.Exports,
-					Imports:  market.Data.Imports,
-					Exchange: market.Data.Exchange,
+					Exports:  market.Exports,
+					Imports:  market.Imports,
+					Exchange: market.Exchange,
 				})
 				break // Found the good, no need to check other imports
 			}

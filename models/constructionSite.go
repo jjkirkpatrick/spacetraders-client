@@ -1,9 +1,9 @@
 package models
 
 type SupplyConstructionSiteRequest struct {
-	ShipSymbol  string `json:"shipSymbol"`
-	TradeSymbol string `json:"tradeSymbol"`
-	Units       int    `json:"units"`
+	ShipSymbol  string     `json:"shipSymbol"`
+	TradeSymbol GoodSymbol `json:"tradeSymbol"`
+	Units       int        `json:"units"`
 }
 
 type ConstructionSite struct {

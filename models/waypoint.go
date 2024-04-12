@@ -23,6 +23,7 @@ const (
 	GravityWell           WaypointType = "GRAVITY_WELL"
 	ArtificialGravityWell WaypointType = "ARTIFICIAL_GRAVITY_WELL"
 	FuelStation           WaypointType = "FUEL_STATION"
+	
 )
 
 type WaypointTrait string

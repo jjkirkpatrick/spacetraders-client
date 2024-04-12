@@ -7,6 +7,7 @@ type System struct {
 	X            int        `json:"x"`
 	Y            int        `json:"y"`
 	Waypoints    []Waypoint `json:"waypoints"`
+	Factions     []Faction  `json:"factions"`
 }
 
 type Waypoint struct {

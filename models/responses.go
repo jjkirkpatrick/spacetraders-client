@@ -180,7 +180,7 @@ type RepairShipResponse struct {
 	} `json:"data"`
 }
 
-type PatchShipNacResponse struct {
+type PatchShipNavResponse struct {
 	Data struct {
 		SystemSymbol   string       `json:"systemSymbol"`
 		WaypointSymbol string       `json:"waypointSymbol"`
@@ -202,14 +202,8 @@ type ShipRefineResponse struct {
 	Data struct {
 		Cargo    Cargo        `json:"cargo"`
 		Cooldown ShipCooldown `json:"coolDown"`
-		Produced struct {
-			TradeSymbol GoodSymbol `json:"tradeSymbol"`
-			Units       int        `json:"units"`
-		} `json:"produced"`
-		Consumed struct {
-			TradeSymbol GoodSymbol `json:"tradeSymbol"`
-			Units       int        `json:"units"`
-		} `json:"consumed"`
+		Produced Produced     `json:"produced"`
+		Consumed Consumed     `json:"consumed"`
 	} `json:"data"`
 }
 
@@ -243,21 +237,6 @@ type GetSystemResponse struct {
 		Waypoints    []Waypoint   `json:"waypoints"`
 		Factions     []Faction    `json:"factions"`
 	} `json:"data"`
-}
-
-type ListWaypointsResponse struct {
-	Symbol              string          `json:"symbol"`
-	Type                WaypointType    `json:"type"`
-	SystemSymbol        string          `json:"systemSymbol"`
-	X                   int             `json:"x"`
-	Y                   int             `json:"y"`
-	Orbitals            []Orbital       `json:"orbitals"`
-	Orbits              string          `json:"orbits"`
-	Faction             Faction         `json:"factions"`
-	Traits              []WaypoinTraits `json:"traits"`
-	Modifiers           []Modifier      `json:"modifiers"`
-	Chart               Chart           `json:"chart"`
-	IsUnderConstruction bool            `json:"isUnderConstruction"`
 }
 
 type GetWaypointResponse struct {
