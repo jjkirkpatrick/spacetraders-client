@@ -1,7 +1,6 @@
 package entities
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
@@ -67,6 +66,12 @@ func GetShip(c *client.Client, symbol string) (*Ship, error) {
 		client: c,
 	}
 
+	graph, graphErr := shipEntity.buildGraph()
+	if graphErr != nil {
+		return nil, graphErr
+	}
+	shipEntity.Graph = *graph
+
 	return shipEntity, nil
 }
 
@@ -100,7 +105,6 @@ func PurchaseShip(c *client.Client, shipType string, waypoint string) (*models.A
 func (s *Ship) Orbit() (*models.ShipNav, error) {
 	nav, err := api.OrbitShip(s.client.Post, s.Symbol)
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
 		return nil, err.AsError()
 	}
 
@@ -352,11 +356,15 @@ func (s *Ship) Refuel(amount int, fromCargo bool) (*models.Agent, *models.FuelDe
 	refuelRequest := &models.RefuelShipRequest{
 		FromCargo: fromCargo,
 	}
-	if amount != 0 {
+	if amount == 0 {
+		refuelRequest.Units = s.Fuel.Capacity
+	} else {
 		refuelRequest.Units = amount
 	}
+
 	response, err := api.RefuelShip(s.client.Post, s.Symbol, refuelRequest)
 	if err != nil {
+		log.Error().Msgf("Error refueling ship %s: %v", s.Symbol, err.Data)
 		return nil, nil, nil, err.AsError()
 	}
 
@@ -504,13 +512,13 @@ func (s *Ship) GetRouteToDestination(destination string) (*models.PathfindingRou
 	}
 
 	// Find the optimal route using Dijkstra's algorithm
-	steps, totalTime := api.FindOptimalRoute(s.Graph, allWaypoints, startLocation, destination, s.Fuel.Current, s.Fuel.Capacity)
+	steps, totalTime := findOptimalRoute(s, allWaypoints, destination)
 
 	return &models.PathfindingRoute{StartLocation: startLocation, EndLocation: destination, Steps: steps, TotalTime: totalTime}, nil
 }
 
 func (s *Ship) buildGraph() (*models.Graph, error) {
-	log.Debug().Msgf("Building graph for ship %s", s.Symbol)
+	log.Trace().Msgf("Building graph for ship %s", s.Symbol)
 	// Attempt to retrieve the graph from cache first
 	cachedGraph, found := s.client.CacheClient.Get(s.Nav.SystemSymbol)
 	if found {

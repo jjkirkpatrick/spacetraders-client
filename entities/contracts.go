@@ -66,7 +66,7 @@ func (c *Contract) Accept() (*Agent, *Contract, error) {
 	return &Agent{Agent: *agent, client: c.client}, &Contract{Contract: *contract, client: c.client}, nil
 }
 
-func (c *Contract) DeliverCargo(shop Ship, tradeGood models.GoodSymbol, units int) (*Contract, *models.Cargo, error) {
+func (c *Contract) DeliverCargo(shop *Ship, tradeGood models.GoodSymbol, units int) (*Contract, *models.Cargo, error) {
 
 	contractRequest := models.DeliverContractCargoRequest{
 		ShipSymbol:  shop.Symbol,
