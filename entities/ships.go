@@ -646,6 +646,16 @@ func (s *Ship) CalculateTravelTime(distance float64, flightMode models.FlightMod
 }
 
 func (s *Ship) findOptimalRoute(destination string) ([]models.RouteStep, int) {
+
+	//check if the ship has a 0 fuel capacity if so return a path to drift to the destination
+	if s.Fuel.Capacity == 0 {
+		return []models.RouteStep{{
+			Waypoint:     destination,
+			FlightMode:   models.FlightModeDrift,
+			ShouldRefuel: false,
+		}}, 0
+	}
+
 	// Create a map to store the shortest distance to each waypoint
 	shortestDistances := make(map[string]int)
 	for waypoint := range s.Graph {
@@ -676,6 +686,17 @@ func (s *Ship) findOptimalRoute(destination string) ([]models.RouteStep, int) {
 
 		// Explore neighboring waypoints
 		for neighbor, edges := range s.Graph[current] {
+			// Skip waypoints without a marketplace unless it's the destination
+			if neighbor != destination {
+				if neighborEdges, ok := s.Graph[neighbor][neighbor]; ok {
+					if edge, ok := neighborEdges[models.FlightModeCruise]; ok && edge != nil {
+						if !edge.HasMarketplace {
+							continue
+						}
+					}
+				}
+			}
+
 			for flightMode, edge := range edges {
 				fuelRequired := edge.FuelRequired
 				travelTime := edge.TravelTime
@@ -697,17 +718,6 @@ func (s *Ship) findOptimalRoute(destination string) ([]models.RouteStep, int) {
 				}
 			}
 		}
-
-		// Refuel at the current waypoint if it has a marketplace
-		if edges, ok := s.Graph[current][current]; ok {
-			if edge, ok := edges[models.FlightModeCruise]; ok {
-				if edge != nil {
-					if edge.HasMarketplace {
-						s.Fuel.Current = s.Fuel.Capacity
-					}
-				}
-			}
-		}
 	}
 
 	path := []models.RouteStep{}
@@ -724,13 +734,19 @@ func (s *Ship) findOptimalRoute(destination string) ([]models.RouteStep, int) {
 			}
 		}
 
-		path = append([]models.RouteStep{{
-			Waypoint:     current,
-			FlightMode:   flightModes[current],
-			ShouldRefuel: shouldRefuel,
-		}}, path...)
+		// Check if the flight mode is set and has a valid edge
+		if flightMode, ok := flightModes[current]; ok {
+			if edge, ok := s.Graph[previousWaypoint][current][flightMode]; ok && edge != nil {
+				path = append([]models.RouteStep{{
+					Waypoint:     current,
+					FlightMode:   flightMode,
+					ShouldRefuel: shouldRefuel,
+				}}, path...)
 
-		totalTime += s.Graph[previousWaypoint][current][flightModes[current]].TravelTime
+				totalTime += edge.TravelTime
+			}
+		}
+
 		current = previousWaypoint
 	}
 
