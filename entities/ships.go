@@ -180,7 +180,7 @@ func (s *Ship) Survey() ([]models.Survey, error) {
 
 	s.Cooldown = response.Data.Cooldown
 
-	return response.Data.Survey, nil
+	return response.Data.Surveys, nil
 }
 
 func (s *Ship) Extract() (*models.Extraction, error) {

@@ -10,7 +10,7 @@ type CreateChartResponse struct {
 type CreateSurveyResponse struct {
 	Data struct {
 		Cooldown ShipCooldown `json:"cooldown"`
-		Survey   []Survey     `json:"survey"`
+		Surveys  []Survey     `json:"surveys"`
 	} `json:"data"`
 }
 
