@@ -22,7 +22,6 @@ type Client struct {
 	baseURL         string
 	token           string
 	httpClient      *resty.Client
-	retryCount      int
 	retryDelay      time.Duration
 	MetricsReporter metrics.MetricsReporter
 	CacheClient     *cache.Cache
@@ -36,7 +35,6 @@ type ClientOptions struct {
 	Faction           string
 	Email             string
 	RequestsPerSecond float32
-	RetryCount        int
 	LogLevel          log.Level
 	RetryDelay        time.Duration
 }
@@ -45,7 +43,6 @@ type ClientOptions struct {
 func DefaultClientOptions() ClientOptions {
 	return ClientOptions{
 		BaseURL:           "https://api.spacetraders.io/v2",
-		RetryCount:        3,
 		RequestsPerSecond: 2,
 		RetryDelay:        1 * time.Second,
 	}
@@ -72,7 +69,6 @@ func NewClient(options ClientOptions) (*Client, error) {
 		baseURL:         options.BaseURL,
 		httpClient:      resty.New(),
 		context:         context.Background(),
-		retryCount:      options.RetryCount,
 		retryDelay:      options.RetryDelay,
 		MetricsReporter: &metrics.NoOpMetricsReporter{},
 		CacheClient:     cache.NewCache(),
@@ -89,7 +85,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	client.httpClient.SetRateLimiter(rate.NewLimiter(rate.Limit(options.RequestsPerSecond), 10))
 
-	client.Logger.Debug().Msgf("New SpaceTraders client initialized with baseURL: %s, retryCount: %d, rateLimit: %f requests/second", client.baseURL, client.retryCount, options.RequestsPerSecond)
+	client.Logger.Debug().Msgf("New SpaceTraders client initialized with baseURL: %s, rateLimit: %f requests/second", client.baseURL, options.RequestsPerSecond)
 	return client, nil
 }
 
@@ -146,7 +142,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 	var err error
 
 	backoff := c.retryDelay
-	for i := 0; i <= c.retryCount; i++ {
+	for {
 		c.Logger.Trace().Msgf("Sending request: %s %s", method, c.baseURL+endpoint)
 		resp, err = request.Execute(method, c.baseURL+endpoint)
 		metric, _ := metrics.NewMetricBuilder().
@@ -190,7 +186,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 					c.MetricsReporter.WritePoint(metric)
 
 				}
-				if apiError != nil || i == c.retryCount {
+				if apiError != nil {
 					break // Break if we have a parsed error or are on the last retry
 				}
 			}
