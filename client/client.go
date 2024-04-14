@@ -149,6 +149,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 		resp, err = request.Execute(method, c.baseURL+endpoint)
 		metric, _ := metrics.NewMetricBuilder().
 			Namespace("api_request").
+			Tag("agent", c.AgentSymbol).
 			Tag("method", method).
 			Field("count", 1).
 			Timestamp(time.Now()).
@@ -165,6 +166,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 				handleRateLimit(resp, c.Logger)
 				metric, _ := metrics.NewMetricBuilder().
 					Namespace("api_request_error").
+					Tag("agent", c.AgentSymbol).
 					Tag("method", method).
 					Tag("error_type", "rate_limit").
 					Tag("status_code", fmt.Sprintf("%d", resp.StatusCode())).
@@ -179,6 +181,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 				if apiError != nil {
 					metric, _ := metrics.NewMetricBuilder().
 						Namespace("api_request_error").
+						Tag("agent", c.AgentSymbol).
 						Tag("method", method).
 						Tag("error_type", "api_error").
 						Tag("status_code", fmt.Sprintf("%d", resp.StatusCode())).
@@ -206,6 +209,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 		apiError = &models.APIError{Message: err.Error(), Code: 500}
 		metric, _ := metrics.NewMetricBuilder().
 			Namespace("api_request_error").
+			Tag("agent", c.AgentSymbol).
 			Tag("method", method).
 			Tag("error_type", "unknown_error").
 			Tag("status_code", "500").
