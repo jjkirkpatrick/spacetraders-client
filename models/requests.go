@@ -1,7 +1,11 @@
 package models
 
 type ExtractWithSurveyRequest struct {
-	Survey Survey `json:"survey"`
+	Signature  string    `json:"signature"`
+	Symbol     string    `json:"symbol"`
+	Deposits   []Deposit `json:"deposits"`
+	Expiration string    `json:"expiration"  format:"date-time"`
+	Size       string    `json:"size"`
 }
 
 type JettisonRequest struct {

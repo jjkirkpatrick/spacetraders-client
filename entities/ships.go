@@ -209,7 +209,11 @@ func (s *Ship) Siphon() (*models.Extraction, error) {
 
 func (s *Ship) ExtractWithSurvey(survey models.Survey) (*models.Extraction, error) {
 	extractWithSurveyRequest := &models.ExtractWithSurveyRequest{
-		Survey: survey,
+		Signature:  survey.Signature,
+		Symbol:     survey.Symbol,
+		Deposits:   survey.Deposits,
+		Expiration: survey.Expiration,
+		Size:       survey.Size,
 	}
 
 	response, err := api.ExtractResourcesWithSurvey(s.client.Post, s.Symbol, extractWithSurveyRequest)
