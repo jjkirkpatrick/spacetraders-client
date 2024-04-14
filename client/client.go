@@ -23,6 +23,7 @@ type Client struct {
 	token           string
 	httpClient      *resty.Client
 	retryDelay      time.Duration
+	AgentSymbol     string
 	MetricsReporter metrics.MetricsReporter
 	CacheClient     *cache.Cache
 	Logger          *log.Logger
@@ -70,6 +71,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		httpClient:      resty.New(),
 		context:         context.Background(),
 		retryDelay:      options.RetryDelay,
+		AgentSymbol:     options.Symbol,
 		MetricsReporter: &metrics.NoOpMetricsReporter{},
 		CacheClient:     cache.NewCache(),
 		Logger:          &glog.Logger,
