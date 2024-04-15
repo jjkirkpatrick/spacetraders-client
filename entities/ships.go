@@ -104,6 +104,11 @@ func PurchaseShip(c *client.Client, shipType string, waypoint string) (*models.A
 }
 
 func (s *Ship) Orbit() (*models.ShipNav, error) {
+	//check if ship is already orbiting to avoid unnecessary API calls
+	if s.Nav.Status == models.NavStatusInOrbit {
+		return &s.Nav, nil
+	}
+
 	nav, err := api.OrbitShip(s.client.Post, s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
@@ -115,6 +120,11 @@ func (s *Ship) Orbit() (*models.ShipNav, error) {
 }
 
 func (s *Ship) Dock() (*models.ShipNav, error) {
+	//check if ship is already docked to avoid unnecessary API calls
+	if s.Nav.Status == models.NavStatusDocked {
+		return &s.Nav, nil
+	}
+
 	nav, err := api.DockShip(s.client.Post, s.Symbol)
 	if err != nil {
 		return nil, err.AsError()

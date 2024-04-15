@@ -128,11 +128,12 @@ type Good struct {
 }
 
 type Market struct {
-	Symbol   string `json:"symbol"`
-	Exports  []Good `json:"exports"`
-	Imports  []Good `json:"imports"`
-	Exchange []Good `json:"exchange"`
-	// Consider adding other fields as necessary
+	Symbol       string             `json:"symbol"`
+	Exports      []Good             `json:"exports"`
+	Imports      []Good             `json:"imports"`
+	Exchange     []Good             `json:"exchange"`
+	Transactions []Transaction      `json:"transactions"`
+	TradeGoods   []MarketTradeGoods `json:"tradeGoods"`
 }
 
 type Extraction struct {
