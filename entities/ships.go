@@ -440,7 +440,7 @@ func (s *Ship) GetMounts() (*models.MountSymbol, string, string, int, []string, 
 	return &response.Data.Symbol, response.Data.Name, response.Data.Description, response.Data.Strength, response.Data.Depsits, response.Data.Requirements, nil
 }
 
-func (s *Ship) InstallMount(mountSymbol models.MountSymbol) (*models.Agent, []models.Mount, *models.Cargo, *models.Transaction, error) {
+func (s *Ship) InstallMount(mountSymbol models.MountSymbol) (*models.Agent, []models.ShipMount, *models.Cargo, *models.Transaction, error) {
 	installRequest := &models.InstallMountRequest{
 		Symbol: mountSymbol,
 	}
@@ -455,7 +455,7 @@ func (s *Ship) InstallMount(mountSymbol models.MountSymbol) (*models.Agent, []mo
 	return &response.Data.Agent, response.Data.Mounts, &response.Data.Cargo, &response.Data.Transaction, nil
 }
 
-func (s *Ship) RemoveMount(mountSymbol models.MountSymbol) (*models.Agent, []models.Mount, *models.Cargo, *models.Transaction, error) {
+func (s *Ship) RemoveMount(mountSymbol models.MountSymbol) (*models.Agent, []models.ShipMount, *models.Cargo, *models.Transaction, error) {
 	removeRequest := &models.RemoveMountRequest{
 		Symbol: mountSymbol,
 	}

@@ -142,7 +142,7 @@ type GetMountsResponse struct {
 type InstallMountResponse struct {
 	Data struct {
 		Agent       Agent       `json:"agent"`
-		Mounts      []Mount     `json:"mounts"`
+		Mounts      []ShipMount `json:"mounts"`
 		Cargo       Cargo       `json:"cargo"`
 		Transaction Transaction `json:"transaction"`
 	} `json:"data"`
@@ -150,7 +150,7 @@ type InstallMountResponse struct {
 type RemoveMountResponse struct {
 	Data struct {
 		Agent       Agent       `json:"agent"`
-		Mounts      []Mount     `json:"mounts"`
+		Mounts      []ShipMount `json:"mounts"`
 		Cargo       Cargo       `json:"cargo"`
 		Transaction Transaction `json:"transaction"`
 	} `json:"data"`
