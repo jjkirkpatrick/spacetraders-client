@@ -568,7 +568,12 @@ func (s *Ship) buildGraph() (*models.Graph, error) {
 			distance := CalculateDistanceBetweenWaypoints(startWaypoint.X, startWaypoint.Y, endWaypoint.X, endWaypoint.Y)
 
 			for _, flightMode := range []models.FlightMode{models.FlightModeDrift, models.FlightModeCruise, models.FlightModeBurn} {
+				hasMarketPlace := hasMarketplace(allWaypoints, endWaypoint.Symbol)
+
 				fuelRequired := s.CalculateFuelRequired(distance, flightMode)
+				if !hasMarketplace(allWaypoints, endWaypoint.Symbol) {
+					fuelRequired *= 2
+				}
 				travelTime := s.CalculateTravelTime(distance, flightMode)
 
 				if _, ok := graph[startWaypoint.Symbol]; !ok {
@@ -582,7 +587,7 @@ func (s *Ship) buildGraph() (*models.Graph, error) {
 					Distance:       distance,
 					FuelRequired:   fuelRequired,
 					TravelTime:     travelTime,
-					HasMarketplace: hasMarketplace(allWaypoints, endWaypoint.Symbol),
+					HasMarketplace: hasMarketPlace,
 				}
 			}
 		}
