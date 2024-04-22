@@ -176,7 +176,7 @@ const (
 type MarketTradeGoods struct {
 	Symbol        GoodSymbol          `json:"symbol"`
 	Type          MarketTradeGoodType `json:"type"`
-	TradeValue    int                 `json:"tradeValue"`
+	TradeVolume   int                 `json:"tradeVolume"`
 	Supply        MarketTradeSupply   `json:"supply"`
 	Activity      MarketTradeAvtivity `json:"activity"`
 	PurchasePrice int                 `json:"purchasePrice"`
