@@ -8,7 +8,7 @@ import (
 
 type Faction struct {
 	models.Faction
-	client *client.Client
+	Client *client.Client
 }
 
 func ListFactions(c *client.Client) ([]*Faction, error) {
@@ -20,7 +20,7 @@ func ListFactions(c *client.Client) ([]*Faction, error) {
 		for _, modelFaction := range factions {
 			convertedFaction := &Faction{
 				Faction: *modelFaction,
-				client:  c,
+				Client:  c,
 			}
 			convertedFactions = append(convertedFactions, convertedFaction)
 		}
@@ -51,7 +51,7 @@ func GetFaction(c *client.Client, symbol string) (*Faction, error) {
 
 	agentEntity := &Faction{
 		Faction: *faction,
-		client:  c,
+		Client:  c,
 	}
 
 	return agentEntity, nil

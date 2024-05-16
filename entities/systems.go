@@ -10,7 +10,7 @@ import (
 
 type System struct {
 	models.System
-	client *client.Client
+	Client *client.Client
 }
 
 func ListSystems(c *client.Client) ([]*System, error) {
@@ -23,7 +23,7 @@ func ListSystems(c *client.Client) ([]*System, error) {
 		for _, modelSystem := range systems {
 			convertedSystem := &System{
 				System: *modelSystem, // Directly embed the modelContract
-				client: c,
+				Client: c,
 			}
 			convertedSystems = append(convertedSystems, convertedSystem)
 		}
@@ -55,7 +55,7 @@ func GetSystem(c *client.Client, symbol string) (*System, error) {
 
 	systemEntity := &System{
 		System: *system,
-		client: c,
+		Client: c,
 	}
 
 	return systemEntity, nil
@@ -66,7 +66,7 @@ func (s *System) ListWaypoints(trait models.WaypointTrait, waypointType models.W
 	meta := models.Meta{Page: 1, Limit: 20, Total: 0}
 
 	for {
-		waypoints, _, err := api.ListWaypointsInSystem(s.client.Get, &meta, s.Symbol, trait, waypointType)
+		waypoints, _, err := api.ListWaypointsInSystem(s.Client.Get, &meta, s.Symbol, trait, waypointType)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -81,7 +81,7 @@ func (s *System) ListWaypoints(trait models.WaypointTrait, waypointType models.W
 }
 
 func (s *System) FetchWaypoint(symbol string) (*models.Waypoint, error) {
-	waypoint, err := api.GetWaypoint(s.client.Get, s.Symbol, symbol)
+	waypoint, err := api.GetWaypoint(s.Client.Get, s.Symbol, symbol)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (s *System) GetWaypointsWithTrait(trait string, waypointType string) ([]*mo
 }
 
 func (s *System) GetMarket(waypointSymbol string) (*models.Market, error) {
-	market, err := api.GetMarket(s.client.Get, s.Symbol, waypointSymbol)
+	market, err := api.GetMarket(s.Client.Get, s.Symbol, waypointSymbol)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (s *System) GetMarket(waypointSymbol string) (*models.Market, error) {
 }
 
 func (s *System) GetShipyard(waypointSymbol string) (*models.Shipyard, error) {
-	shipyard, err := api.GetShipyard(s.client.Get, s.Symbol, waypointSymbol)
+	shipyard, err := api.GetShipyard(s.Client.Get, s.Symbol, waypointSymbol)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func (s *System) GetShipyard(waypointSymbol string) (*models.Shipyard, error) {
 }
 
 func (s *System) GetJumpGate(waypointSymbol string) (*models.JumpGate, error) {
-	jumpGate, err := api.GetJumpGate(s.client.Get, s.Symbol, waypointSymbol)
+	jumpGate, err := api.GetJumpGate(s.Client.Get, s.Symbol, waypointSymbol)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (s *System) GetJumpGate(waypointSymbol string) (*models.JumpGate, error) {
 }
 
 func (s *System) GetConstructionSite(waypointSymbol string) (*models.ConstructionSite, error) {
-	projects, err := api.GetConstructionSite(s.client.Get, s.Symbol, waypointSymbol)
+	projects, err := api.GetConstructionSite(s.Client.Get, s.Symbol, waypointSymbol)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (s *System) SupplyConstructionSite(shipSymbol string, waypointSymbol string
 		Units:       quantity,
 	}
 
-	_, err := api.SupplyConstructionSite(s.client.Post, s.Symbol, waypointSymbol, payload)
+	_, err := api.SupplyConstructionSite(s.Client.Post, s.Symbol, waypointSymbol, payload)
 	if err != nil {
 		return err
 	}

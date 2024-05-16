@@ -8,7 +8,7 @@ import (
 
 type Contract struct {
 	models.Contract
-	client *client.Client
+	Client *client.Client
 }
 
 func ListContracts(c *client.Client) ([]*Contract, error) {
@@ -20,7 +20,7 @@ func ListContracts(c *client.Client) ([]*Contract, error) {
 		for _, modelContract := range contracts {
 			convertedContract := &Contract{
 				Contract: *modelContract, // Directly embed the modelContract
-				client:   c,
+				Client:   c,
 			}
 			convertedContracts = append(convertedContracts, convertedContract)
 		}
@@ -51,19 +51,19 @@ func GetContract(c *client.Client, symbol string) (*Contract, error) {
 
 	contractEntity := &Contract{
 		Contract: *contract,
-		client:   c,
+		Client:   c,
 	}
 
 	return contractEntity, nil
 }
 
 func (c *Contract) Accept() (*Agent, *Contract, error) {
-	agent, contract, err := api.AcceptContract(c.client.Post, c.Contract.ID)
+	agent, contract, err := api.AcceptContract(c.Client.Post, c.Contract.ID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &Agent{Agent: *agent, client: c.client}, &Contract{Contract: *contract, client: c.client}, nil
+	return &Agent{Agent: *agent, Client: c.Client}, &Contract{Contract: *contract, Client: c.Client}, nil
 }
 
 func (c *Contract) DeliverCargo(shop *Ship, tradeGood models.GoodSymbol, units int) (*Contract, *models.Cargo, error) {
@@ -74,16 +74,16 @@ func (c *Contract) DeliverCargo(shop *Ship, tradeGood models.GoodSymbol, units i
 		Units:       units,
 	}
 
-	agent, cargo, err := api.DeliverContractCargo(c.client.Post, c.Contract.ID, contractRequest)
+	agent, cargo, err := api.DeliverContractCargo(c.Client.Post, c.Contract.ID, contractRequest)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &Contract{Contract: *agent, client: c.client}, cargo, nil
+	return &Contract{Contract: *agent, Client: c.Client}, cargo, nil
 }
 
 func (c *Contract) Fulfill() (*models.Agent, *models.Contract, error) {
-	agent, contract, err := api.FulfillContract(c.client.Post, c.Contract.ID)
+	agent, contract, err := api.FulfillContract(c.Client.Post, c.Contract.ID)
 	if err != nil {
 		return nil, nil, err
 	}

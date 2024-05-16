@@ -8,7 +8,7 @@ import (
 
 type Agent struct {
 	models.Agent
-	client *client.Client
+	Client *client.Client
 }
 
 func ListPublicAgents(c *client.Client) ([]*Agent, error) {
@@ -20,7 +20,7 @@ func ListPublicAgents(c *client.Client) ([]*Agent, error) {
 		for _, modelAgent := range agents {
 			convertedShip := &Agent{
 				Agent:  *modelAgent,
-				client: c,
+				Client: c,
 			}
 			convertedAgents = append(convertedAgents, convertedShip)
 		}
@@ -51,7 +51,7 @@ func GetAgent(c *client.Client) (*Agent, error) {
 
 	agentEntity := &Agent{
 		Agent:  *agent,
-		client: c,
+		Client: c,
 	}
 
 	return agentEntity, nil
@@ -65,7 +65,7 @@ func GetPublicAgent(c *client.Client, symbol string) (*Agent, error) {
 
 	agentEntity := &Agent{
 		Agent:  *agent,
-		client: c,
+		Client: c,
 	}
 
 	return agentEntity, nil
