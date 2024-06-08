@@ -61,11 +61,9 @@ func NewRateLimiter(staticRate, burstRate float64) *RateLimiter {
 func (rl *RateLimiter) Wait(ctx context.Context) error {
 	// Prioritize the static pool over the burst pool
 	if rl.staticLimiter.Allow() {
-		log.Debug().Msg("Request passed through static limiter")
 		return nil
 	}
 	if rl.burstLimiter.Allow() {
-		log.Debug().Msg("Request passed through burst limiter")
 		return nil
 	}
 	return rl.staticLimiter.Wait(ctx)
