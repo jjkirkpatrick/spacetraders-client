@@ -27,6 +27,7 @@ type Client struct {
 	MetricsReporter metrics.MetricsReporter
 	CacheClient     *cache.Cache
 	Logger          *log.Logger
+	RateLimiter     *RateLimiter
 }
 
 // ClientOptions represents the configuration options for the SpaceTraders API client
@@ -38,6 +39,36 @@ type ClientOptions struct {
 	RequestsPerSecond float32
 	LogLevel          log.Level
 	RetryDelay        time.Duration
+}
+
+type RateLimiter struct {
+	staticLimiter *rate.Limiter
+	burstLimiter  *rate.Limiter
+	staticReset   time.Duration
+	burstReset    time.Duration
+}
+
+func NewRateLimiter(staticRate, burstRate float64) *RateLimiter {
+	// Adjusting limiters to handle both static and burst rates with updated capacities and durations
+	return &RateLimiter{
+		staticLimiter: rate.NewLimiter(rate.Limit(staticRate), 2), // 2 requests per second
+		burstLimiter:  rate.NewLimiter(rate.Limit(burstRate), 30), // 30 requests per 60 seconds
+		staticReset:   time.Second,
+		burstReset:    60 * time.Second,
+	}
+}
+
+func (rl *RateLimiter) Wait(ctx context.Context) error {
+	// Prioritize the static pool over the burst pool
+	if rl.staticLimiter.Allow() {
+		log.Debug().Msg("Request passed through static limiter")
+		return nil
+	}
+	if rl.burstLimiter.Allow() {
+		log.Debug().Msg("Request passed through burst limiter")
+		return nil
+	}
+	return rl.staticLimiter.Wait(ctx)
 }
 
 // DefaultClientOptions returns the default configuration options for the SpaceTraders API client
@@ -78,14 +109,14 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	client.Logger.SetLevel(options.LogLevel)
+	client.RateLimiter = NewRateLimiter(2, 0.5) // Corresponding to the static and burst rate limits
 
 	err := client.getOrRegisterToken(options.Faction, options.Symbol, options.Email)
 
 	if err != nil {
+		client.Logger.Error().Msgf("Failed to register or get token: %v", err)
 		return nil, err
 	}
-
-	client.httpClient.SetRateLimiter(rate.NewLimiter(rate.Limit(options.RequestsPerSecond), 10))
 
 	client.Logger.Debug().Msgf("New SpaceTraders client initialized with baseURL: %s, rateLimit: %f requests/second", client.baseURL, options.RequestsPerSecond)
 	return client, nil
@@ -97,6 +128,7 @@ func (c *Client) MetricBuilder() *metrics.MetricBuilder {
 
 func (c *Client) ConfigureMetricsClient(url, token, org, bucket string) {
 	c.MetricsReporter = metrics.NewMetricsClient(url, token, org, bucket)
+	c.Logger.Trace().Msg("Metrics client configured successfully.")
 }
 
 // Get sends a GET request to the specified endpoint with optional query parameters
@@ -145,58 +177,34 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 
 	backoff := c.retryDelay
 	for {
-		c.Logger.Trace().Msgf("Sending request: %s %s", method, c.baseURL+endpoint)
-		resp, err = request.Execute(method, c.baseURL+endpoint)
-		metric, _ := metrics.NewMetricBuilder().
-			Namespace("api_request").
-			Tag("agent", c.AgentSymbol).
-			Tag("method", method).
-			Field("count", 1).
-			Timestamp(time.Now()).
-			Build()
-		c.MetricsReporter.WritePoint(metric)
+		c.Logger.Trace().Msgf("Sending request: %s %s : Request inputs: %s : request Params: %s", method, c.baseURL+endpoint, request.Body, request.QueryParam)
+		err = c.RateLimiter.Wait(c.context)
 		if err != nil {
-			time.Sleep(backoff)
-			backoff *= 2 // Exponential backoff
+			c.Logger.Error().Msg("Rate limiter error: " + err.Error())
+			return &models.APIError{Message: err.Error(), Code: 429}
+		}
+
+		c.MetricsReporter.Increment("api_requests_total", map[string]string{"agent": c.AgentSymbol, "endpoint": endpoint, "method": method}, 1)
+
+		resp, err = request.Execute(method, c.baseURL+endpoint)
+
+		if err == nil && !resp.IsError() {
+			c.MetricsReporter.Increment("api_requests_success", map[string]string{"agent": c.AgentSymbol, "endpoint": endpoint, "method": method}, 1)
+			return nil // Success
+		}
+
+		if resp.StatusCode() == 429 {
+			c.Logger.Warn().Msg("Rate limit exceeded, handling rate limit.")
+			handleRateLimit(resp, c.Logger)
 			continue
 		}
 
 		if resp.IsError() {
-			if isRateLimitError(resp.StatusCode()) {
-				handleRateLimit(resp, c.Logger)
-				metric, _ := metrics.NewMetricBuilder().
-					Namespace("api_request_error").
-					Tag("agent", c.AgentSymbol).
-					Tag("method", method).
-					Tag("error_type", "rate_limit").
-					Tag("status_code", fmt.Sprintf("%d", resp.StatusCode())).
-					Field("count", 1).
-					Timestamp(time.Now()).
-					Build()
-				c.MetricsReporter.WritePoint(metric)
+			apiError = parseAPIError(resp)
+			c.MetricsReporter.Increment("api_requests_errors", map[string]string{"agent": c.AgentSymbol, "method": method, "status_code": fmt.Sprintf("%d", resp.StatusCode()), "error_type": apiError.Error()}, 1)
+			c.Logger.Error().Err(apiError.AsError()).Msgf("API Request resulted in error : %s : data %s", apiError.AsError(), apiError.Data)
 
-				continue
-			} else {
-				apiError = parseAPIError(resp)
-				if apiError != nil {
-					metric, _ := metrics.NewMetricBuilder().
-						Namespace("api_request_error").
-						Tag("agent", c.AgentSymbol).
-						Tag("method", method).
-						Tag("error_type", "api_error").
-						Tag("status_code", fmt.Sprintf("%d", resp.StatusCode())).
-						Field("count", 1).
-						Timestamp(time.Now()).
-						Build()
-					c.MetricsReporter.WritePoint(metric)
-
-				}
-				if apiError != nil {
-					break // Break if we have a parsed error or are on the last retry
-				}
-			}
-		} else {
-			return nil // Success
+			return apiError
 		}
 
 		// Apply random jitter to backoff
@@ -204,21 +212,6 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 		time.Sleep(backoff)
 		backoff *= 2 // Exponential backoff
 	}
-
-	if apiError == nil && err != nil {
-		apiError = &models.APIError{Message: err.Error(), Code: 500}
-		metric, _ := metrics.NewMetricBuilder().
-			Namespace("api_request_error").
-			Tag("agent", c.AgentSymbol).
-			Tag("method", method).
-			Tag("error_type", "unknown_error").
-			Tag("status_code", "500").
-			Field("count", 1).
-			Timestamp(time.Now()).
-			Build()
-		c.MetricsReporter.WritePoint(metric)
-	}
-	return apiError
 }
 
 // Helper function to apply jitter to backoff
@@ -249,6 +242,7 @@ func parseAPIError(resp *resty.Response) *models.APIError {
 	if err != nil {
 		return &models.APIError{Message: "failed to parse API error response", Code: resp.StatusCode()}
 	}
+
 	return &errorWrapper.Error
 }
 
