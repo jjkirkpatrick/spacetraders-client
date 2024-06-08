@@ -33,6 +33,13 @@ func (b *MetricBuilder) Tag(key, value string) *MetricBuilder {
 	return b
 }
 
+func (b *MetricBuilder) Tags(newTags map[string]string) *MetricBuilder {
+	for key, value := range newTags {
+		b.tags[key] = value
+	}
+	return b
+}
+
 func (b *MetricBuilder) Field(key string, value interface{}) *MetricBuilder {
 	b.fields[key] = value
 	return b
