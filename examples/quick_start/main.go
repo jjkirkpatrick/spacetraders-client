@@ -1,14 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
 	"github.com/jjkirkpatrick/spacetraders-client/models"
-	"github.com/phuslu/log"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type GameState struct {
@@ -19,64 +26,102 @@ type GameState struct {
 }
 
 func main() {
+	ctx := context.Background()
 
-	log.DefaultLogger = log.Logger{
-		Level:      log.InfoLevel,
-		Caller:     1,
-		TimeFormat: "15:04:05",
-		Writer: &log.ConsoleWriter{
-			ColorOutput:    true,
-			EndWithMessage: true,
-			Formatter:      client.Logformat,
+	// Initialize slog with pretty printing
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			return a
 		},
-	}
+	})
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
 
 	// Create a new client with a token
 	options := client.DefaultClientOptions()
-	options.Symbol = "BlueCaloria-1"
+	options.Symbol = "BlueCa-99"
 	options.Faction = "COSMIC"
-	options.LogLevel = log.InfoLevel
+	options.LogLevel = slog.LevelInfo
+	options.TelemetryConfig = &telemetry.Config{
+		ServiceName:    "spacetraders-metrics",
+		ServiceVersion: "1.0.0",
+		OTLPEndpoint:   "localhost:4317",
+	}
 
 	gameState := &GameState{}
 
 	client, cerr := client.NewClient(options)
 	if cerr != nil {
-		log.Fatal().Msgf("Failed to create client: %v", cerr)
+		slog.Error("Failed to create client", "error", cerr)
+		os.Exit(1)
 	}
+	defer client.Close(ctx)
 
-	client.ConfigureMetricsClient(
-		"http://192.168.1.33:8086",
-		"238nUuJVX9CzDqdsU7wvINk8ByIG-3MykZqwUSTEwBIeLgBKNTbwV8x_lik_4t1oXSTfj8OqRPwzmPS8y3tsdg==",
-		"spacetraders",
-		"spacetraders",
-	)
+	// Get a tracer
+	tracer := otel.GetTracerProvider().Tracer("quickstart-example")
 
+	// Create a root span for the game session
+	ctx, rootSpan := tracer.Start(ctx, "game_session")
+	defer rootSpan.End()
+
+	// Setup graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		slog.Info("Shutting down gracefully...")
+		rootSpan.End()
+		client.Close(ctx)
+		os.Exit(0)
+	}()
+
+	// Get agent information with tracing
+	ctx, agentSpan := tracer.Start(ctx, "get_agent")
 	agent, err := entities.GetAgent(client)
 	if err != nil {
-		log.Fatal().Msgf("Failed to get agent: %v", err)
+		agentSpan.RecordError(err)
+		agentSpan.SetAttributes(attribute.String("error", err.Error()))
+		slog.Error("Failed to get agent", "error", err)
+		os.Exit(1)
 	}
+	agentSpan.SetAttributes(
+		attribute.String("agent.symbol", agent.Symbol),
+		attribute.Int64("agent.credits", agent.Credits),
+	)
+	agentSpan.End()
+
 	gameState.Agent = agent
 	gameState.HomeSystem = getSystemNameFromHomeSystem(gameState.Agent)
 
-	// Get all contracts
+	// Get all contracts with tracing
+	ctx, contractsSpan := tracer.Start(ctx, "list_contracts")
 	contracts, err := entities.ListContracts(client)
 	if err != nil {
-		log.Fatal().Msgf("Failed to list contracts: %v", err)
+		contractsSpan.RecordError(err)
+		slog.Error("Failed to list contracts", "error", err)
+		os.Exit(1)
 	}
+	contractsSpan.SetAttributes(attribute.Int("contracts.count", len(contracts)))
+	contractsSpan.End()
 
 	gameState.Contracts = contracts
 
+	// Accept contracts with tracing
+	ctx, acceptSpan := tracer.Start(ctx, "accept_contracts")
 	for _, contract := range gameState.Contracts {
-		log.Info().Msgf("Contract: %s", contract.ID)
 		agent, _, err := contract.Accept()
 		if err != nil && strings.Contains(err.Error(), "has already been accepted") {
 			continue
 		}
 		gameState.Agent = agent
 		if err != nil {
-			log.Fatal().Msgf("Failed to accept contract: %v", err)
+			acceptSpan.RecordError(err)
+			slog.Error("Failed to accept contract", "error", err)
+			os.Exit(1)
 		}
 	}
+	acceptSpan.End()
 
 	// Get active contract terms
 	activeContractTrms := gameState.getActiveContracts()
@@ -86,28 +131,32 @@ func main() {
 
 	currentSystem, err := entities.GetSystem(client, gameState.HomeSystem)
 	if err != nil {
-		log.Fatal().Msgf("Failed to get system: %v", err)
+		slog.Error("Failed to get system", "error", err)
+		os.Exit(1)
 	}
 
-	//shipyards, err := currentSystem.GetWaypointsWithTrait("SHIPYARD", "")
 	// Find the engineered asteroid in the system
 	astroid, err := currentSystem.GetWaypointsWithTrait("", "ENGINEERED_ASTEROID")
 	if err != nil {
-		log.Fatal().Msgf("Failed to find engineered asteroid: %v", err)
+		slog.Error("Failed to find engineered asteroid", "error", err)
+		os.Exit(1)
 	}
 	// Get mining ship
 	miningShipSymbol, err := gameState.getMiningShip(client)
 	if err != nil {
-		log.Info().Msgf("No mining ship found, attempting to find a shipyard: %v", err)
+		slog.Info("No mining ship found, attempting to find a shipyard", "error", err)
 		shipyards, err := currentSystem.GetWaypointsWithTrait("SHIPYARD", "")
 		if err != nil || len(shipyards) == 0 {
-			log.Fatal().Msgf("Failed to find shipyard: %v", err)
+			slog.Error("Failed to find shipyard", "error", err)
+			os.Exit(1)
 		}
 		var shipyard *models.Shipyard
 		for _, shipyardInfo := range shipyards {
 			tempShipyard, err := currentSystem.GetShipyard(shipyardInfo.Symbol)
 			if err != nil {
-				log.Info().Msgf("Failed to get shipyard details for %s: %v", shipyardInfo.Symbol, err)
+				slog.Info("Failed to get shipyard details",
+					"shipyard", shipyardInfo.Symbol,
+					"error", err)
 				continue
 			}
 			for _, shipType := range tempShipyard.ShipTypes {
@@ -121,38 +170,44 @@ func main() {
 			}
 		}
 		if shipyard == nil {
-			log.Fatal().Msg("Failed to find a shipyard selling SHIP_MINING_DRONE")
+			slog.Error("Failed to find a shipyard selling SHIP_MINING_DRONE")
+			os.Exit(1)
 		}
 		_, ship, _, err := entities.PurchaseShip(client, "SHIP_MINING_DRONE", shipyard.Symbol)
 		if err != nil {
-			log.Fatal().Msgf("Failed to purchase mining ship: %v", err)
+			slog.Error("Failed to purchase mining ship", "error", err)
+			os.Exit(1)
 		}
 		miningShipSymbol = ship.Symbol
-		log.Info().Msgf("Purchased mining ship: %s", miningShipSymbol)
+		slog.Info("Purchased mining ship", "symbol", miningShipSymbol)
 	}
 
 	ship, err := entities.GetShip(client, miningShipSymbol)
 	if err != nil {
-		log.Fatal().Msgf("Failed to get ship: %v", err)
+		slog.Error("Failed to get ship", "error", err)
+		os.Exit(1)
 	}
 
 	// Mine resources and deliver contracts
 	err = gameState.mineAndDeliverContracts(ship, astroid[0], activeContractTrms)
 	if err != nil {
-		log.Fatal().Msgf("Failed to mine and deliver contracts: %v", err)
+		slog.Error("Failed to mine and deliver contracts", "error", err)
+		os.Exit(1)
 	}
 
-	log.Info().Msg("Program completed successfully.")
+	slog.Info("Program completed successfully")
 }
 
 func waitForCooldown(ship *entities.Ship) {
 	_, cerr := ship.FetchCooldown()
 	if cerr != nil {
-		log.Fatal().Msgf("Failed to get ship cooldown: %v", cerr)
+		slog.Error("Failed to get ship cooldown", "error", cerr)
+		os.Exit(1)
 	}
 
 	if ship.Cooldown.RemainingSeconds > 0 {
-		log.Info().Msgf("Waiting for cooldown to finish Remaining Seconds: %d", ship.Cooldown.RemainingSeconds)
+		slog.Info("Waiting for cooldown to finish",
+			"remaining_seconds", ship.Cooldown.RemainingSeconds)
 		time.Sleep(time.Duration(ship.Cooldown.RemainingSeconds) * time.Second)
 	}
 }
@@ -177,15 +232,15 @@ func (gs *GameState) getActiveContracts() []entities.Contract {
 
 func (gs *GameState) printActiveContractDetails(activeContractTrms []entities.Contract) {
 	for _, contract := range activeContractTrms {
-		log.Info().Msgf("Contract: %s", contract.ID)
+		slog.Info("Contract", "id", contract.ID)
 		for _, deliver := range contract.Terms.Deliver {
-			log.Info().Msgf("Deliver: %s %s %d %d", deliver.TradeSymbol, deliver.DestinationSymbol, deliver.UnitsRequired, deliver.UnitsFulfilled)
+			slog.Info("Deliver", "trade_symbol", deliver.TradeSymbol, "destination_symbol", deliver.DestinationSymbol, "units_required", deliver.UnitsRequired, "units_fulfilled", deliver.UnitsFulfilled)
 		}
 	}
 }
 
 func (gs *GameState) getMiningShip(client *client.Client) (string, error) {
-	log.Info().Msg("Getting mining ship")
+	slog.Info("Getting mining ship")
 	allShips, err := entities.ListShips(client)
 	if err != nil {
 		return "", fmt.Errorf("failed to list ships: %v", err)
@@ -201,7 +256,7 @@ func (gs *GameState) getMiningShip(client *client.Client) (string, error) {
 }
 
 func (gs *GameState) mineAndDeliverContracts(miningShip *entities.Ship, astroid *models.Waypoint, activeContractTrms []entities.Contract) error {
-	log.Info().Msg("Mining and delivering contracts")
+	slog.Info("Mining and delivering contracts")
 	for {
 		// Check if all contracts are fulfilled
 		allContractsFulfilled := true
@@ -212,18 +267,18 @@ func (gs *GameState) mineAndDeliverContracts(miningShip *entities.Ship, astroid 
 			}
 		}
 		if allContractsFulfilled {
-			log.Info().Msg("All contracts fulfilled.")
+			slog.Info("All contracts fulfilled.")
 			break
 		}
 
 		//Navigate to the asteroid
-		log.Info().Msg("Navigating to asteroid")
+		slog.Info("Navigating to asteroid")
 		err := gs.navigateToWaypoint(miningShip, *astroid)
 		if err != nil {
 			return fmt.Errorf("failed to navigate to asteroid: %v", err)
 		}
 
-		log.Info().Msg("Mining resources")
+		slog.Info("Mining resources")
 
 		_, err = miningShip.Orbit()
 		if err != nil {
@@ -236,14 +291,14 @@ func (gs *GameState) mineAndDeliverContracts(miningShip *entities.Ship, astroid 
 			return fmt.Errorf("failed to mine resources: %v", err)
 		}
 
-		log.Info().Msg("Selling trade goods")
+		slog.Info("Selling trade goods")
 		// Sell trade goods not required for contracts
 		err = gs.jettisonUnwantedCargo(miningShip, activeContractTrms)
 		if err != nil {
 			return fmt.Errorf("failed to sell trade goods: %v", err)
 		}
 
-		log.Info().Msg("Delivering contract goods")
+		slog.Info("Delivering contract goods")
 
 		// Deliver goods to contract destinations
 		err = gs.deliverContractGoods(miningShip, activeContractTrms)
@@ -264,7 +319,7 @@ func (gs *GameState) navigateToWaypoint(miningShip *entities.Ship, waypointSymbo
 
 	// Log each step of the route
 	for _, step := range route.Steps {
-		log.Info().Msgf("Navigating to waypoint %s", step.Waypoint)
+		slog.Info("Navigating to waypoint", "waypoint", step.Waypoint)
 		//ensure ship is in orbit
 		_, err := miningShip.Orbit()
 
@@ -284,7 +339,7 @@ func (gs *GameState) navigateToWaypoint(miningShip *entities.Ship, waypointSymbo
 		}
 
 		arrivalTime := miningShip.Nav.Route.Arrival
-		log.Info().Msgf("Navigating to %s. Arrival Time: %s, using Flight mode:  %s\n", waypointSymbol.Symbol, arrivalTime, step.FlightMode)
+		slog.Info("Navigating to", "waypoint", waypointSymbol.Symbol, "arrival_time", arrivalTime, "using_flight_mode", step.FlightMode)
 
 		arrivalTimeParsed, stateErr := time.Parse(time.RFC3339, arrivalTime)
 		if stateErr != nil {
@@ -311,7 +366,7 @@ func (gs *GameState) navigateToWaypoint(miningShip *entities.Ship, waypointSymbo
 }
 
 func (gs *GameState) dockAndRefuelShip(miningShip *entities.Ship) error {
-	log.Info().Msgf("Initiating refueling process for ship: %s", miningShip.Symbol)
+	slog.Info("Initiating refueling process for ship", "symbol", miningShip.Symbol)
 	_, err := miningShip.Dock()
 	if err != nil {
 		return fmt.Errorf("failed to dock ship: %v", err)
@@ -321,7 +376,7 @@ func (gs *GameState) dockAndRefuelShip(miningShip *entities.Ship) error {
 	if err != nil {
 		return fmt.Errorf("failed to refuel ship: %v", err)
 	}
-	log.Info().Msgf("Refueling completed successfully for ship: %s", miningShip.Symbol)
+	slog.Info("Refueling completed successfully for ship", "symbol", miningShip.Symbol)
 
 	return nil
 }
@@ -333,9 +388,9 @@ func (gs *GameState) mineResources(miningShip *entities.Ship, activeContractTrms
 	}
 
 	for _, contract := range activeContractTrms {
-		log.Info().Msgf("Checking contract requirements for contract ID: %s", contract.ID)
+		slog.Info("Checking contract requirements for contract ID", "id", contract.ID)
 		for _, deliver := range contract.Terms.Deliver {
-			log.Info().Msgf("Requirement: %d units of %s to be delivered to %s", deliver.UnitsRequired, deliver.TradeSymbol, deliver.DestinationSymbol)
+			slog.Info("Requirement", "units_required", deliver.UnitsRequired, "trade_symbol", deliver.TradeSymbol, "destination_symbol", deliver.DestinationSymbol)
 			unitsAvailable := 0
 			for _, cargoItem := range cargo.Inventory {
 				if cargoItem.Symbol == deliver.TradeSymbol {
@@ -343,15 +398,15 @@ func (gs *GameState) mineResources(miningShip *entities.Ship, activeContractTrms
 				}
 			}
 			if unitsAvailable >= deliver.UnitsRequired-deliver.UnitsFulfilled {
-				log.Info().Msgf("Cargo contains enough %s to fulfill the contract requirement.", deliver.TradeSymbol)
+				slog.Info("Cargo contains enough", "trade_symbol", deliver.TradeSymbol, "to fulfill the contract requirement.")
 			} else {
 				for unitsAvailable < deliver.UnitsRequired {
-					log.Info().Msgf("Not enough %s in cargo to fulfill the contract requirement. Required: %d, Available: %d", deliver.TradeSymbol, deliver.UnitsRequired-activeContractTrms[0].Terms.Deliver[0].UnitsFulfilled, unitsAvailable)
+					slog.Info("Not enough", "trade_symbol", deliver.TradeSymbol, "in cargo to fulfill the contract requirement. Required:", deliver.UnitsRequired-activeContractTrms[0].Terms.Deliver[0].UnitsFulfilled, "Available:", unitsAvailable)
 					if cargo.Units >= cargo.Capacity {
-						log.Info().Msg("Cargo hold is full. Unable to extract more resources.")
+						slog.Info("Cargo hold is full. Unable to extract more resources.")
 						break
 					}
-					log.Info().Msg("Attempting to extract more resources...")
+					slog.Info("Attempting to extract more resources...")
 					waitForCooldown(miningShip)
 					_, err := miningShip.Extract()
 					if err != nil {
@@ -365,12 +420,12 @@ func (gs *GameState) mineResources(miningShip *entities.Ship, activeContractTrms
 
 					for _, item := range cargo.Inventory {
 						if item.Symbol != deliver.TradeSymbol {
-							log.Info().Msgf("Jettisoning %s as it is not required for the current contract.", item.Name)
+							slog.Info("Jettisoning", "name", item.Name, "as it is not required for the current contract.")
 							_, jettisonErr := miningShip.Jettison(models.GoodSymbol(item.Symbol), item.Units)
 							if jettisonErr != nil {
 								return fmt.Errorf("failed to jettison %s: %v", item.Name, jettisonErr)
 							}
-							log.Info().Msgf("Successfully jettisoned %s.", item.Name)
+							slog.Info("Successfully jettisoned", "name", item.Name)
 						}
 					}
 					// Refresh cargo after jettisoning unnecessary items
@@ -387,15 +442,15 @@ func (gs *GameState) mineResources(miningShip *entities.Ship, activeContractTrms
 						}
 					}
 
-					log.Info().Msgf("Cargo Summary:")
-					log.Info().Msgf("Capacity: %d, Units: %d", cargo.Capacity, cargo.Units)
-					log.Info().Msg("Inventory:")
+					slog.Info("Cargo Summary")
+					slog.Info("Capacity", "capacity", cargo.Capacity, "units", cargo.Units)
+					slog.Info("Inventory")
 					for _, item := range cargo.Inventory {
-						log.Info().Msgf("- %s: %d units", item.Name, item.Units)
+						slog.Info("-", "name", item.Name, "units", item.Units)
 					}
 				}
 				if unitsAvailable >= deliver.UnitsRequired {
-					log.Info().Msgf("Now have enough %s to fulfill the contract requirement. Required: %d, Available: %d", deliver.TradeSymbol, deliver.UnitsRequired-activeContractTrms[0].Terms.Deliver[0].UnitsFulfilled, unitsAvailable)
+					slog.Info("Now have enough", "trade_symbol", deliver.TradeSymbol, "to fulfill the contract requirement. Required:", deliver.UnitsRequired-activeContractTrms[0].Terms.Deliver[0].UnitsFulfilled, "Available:", unitsAvailable)
 				}
 			}
 		}
@@ -409,21 +464,21 @@ func (gs *GameState) jettisonUnwantedCargo(miningShip *entities.Ship, activeCont
 		return fmt.Errorf("failed to get ship cargo: %v", err)
 	}
 
-	log.Info().Msg("Starting to sell trade goods not required for the active contract.")
+	slog.Info("Starting to sell trade goods not required for the active contract.")
 
 	for _, item := range cargo.Inventory {
 		// Check if the item is not part of the active contract requirements
 		if !gs.isItemRequiredForContracts(models.GoodSymbol(item.Symbol), activeContractTrms) {
-			log.Info().Msgf("No markets found buying %s, jettisoning cargo.", item.Name)
+			slog.Info("No markets found buying", "name", item.Name, "jettisoning cargo.")
 			_, jettisonErr := miningShip.Jettison(models.GoodSymbol(item.Symbol), item.Units)
 			if jettisonErr != nil {
 				return fmt.Errorf("failed to jettison %s: %v", item.Name, jettisonErr)
 			}
-			log.Info().Msgf("Successfully jettisoned %s.", item.Name)
+			slog.Info("Successfully jettisoned", "name", item.Name)
 		}
 	}
 
-	log.Info().Msg("Finished dumping trade goods.")
+	slog.Info("Finished dumping trade goods.")
 	return nil
 }
 
@@ -442,7 +497,7 @@ func (gs *GameState) deliverContractGoods(miningShip *entities.Ship, activeContr
 	for _, contract := range activeContractTrms {
 		for _, deliver := range contract.Terms.Deliver {
 			if deliver.UnitsFulfilled < deliver.UnitsRequired {
-				log.Info().Msgf("Delivering goods for contract ID: %s", contract.ID)
+				slog.Info("Delivering goods for contract ID", "id", contract.ID)
 				naverr := gs.navigateToWaypoint(miningShip, models.Waypoint{Symbol: deliver.DestinationSymbol})
 				if naverr != nil {
 					return fmt.Errorf("failed to navigate to destination: %v", naverr)
@@ -470,7 +525,7 @@ func (gs *GameState) deliverContractGoods(miningShip *entities.Ship, activeContr
 				if err != nil {
 					return fmt.Errorf("failed to deliver contract: %v", err)
 				}
-				log.Info().Msgf("Delivered %d units of %s for contract ID: %s", deliver.UnitsRequired-deliver.UnitsFulfilled, deliver.TradeSymbol, contract.ID)
+				slog.Info("Delivered", "units", deliver.UnitsRequired-deliver.UnitsFulfilled, "trade_symbol", deliver.TradeSymbol, "for contract ID", "id", contract.ID)
 			}
 		}
 
@@ -488,9 +543,9 @@ func (gs *GameState) deliverContractGoods(miningShip *entities.Ship, activeContr
 				if err != nil {
 					return fmt.Errorf("failed to fulfill contract: %v", err)
 				}
-				log.Info().Msgf("Fulfilled contract ID: %s", contract.ID)
+				slog.Info("Fulfilled contract ID", "id", contract.ID)
 			} else {
-				log.Info().Msgf("Cannot fulfill contract ID: %s as not all deliveries have been made.", contract.ID)
+				slog.Info("Cannot fulfill contract ID", "id", contract.ID, "as not all deliveries have been made.")
 			}
 		}
 	}

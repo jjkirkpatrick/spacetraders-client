@@ -1,7 +1,8 @@
 package main
 
 import (
-	"github.com/phuslu/log"
+	"log/slog"
+	"os"
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
@@ -9,57 +10,54 @@ import (
 
 func main() {
 	// Set up the logger
-	log.DefaultLogger = log.Logger{
-		Level:      log.InfoLevel,
-		Caller:     1,
-		TimeFormat: "15:04:05",
-		Writer: &log.ConsoleWriter{
-			ColorOutput:    true,
-			EndWithMessage: true,
-			Formatter:      client.Logformat,
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			return a
 		},
-	}
+	})
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
 
 	// Create a new client with a token
 	options := client.DefaultClientOptions()
-
 	options.Symbol = "ships-example"
 	options.Faction = "COSMIC"
 
 	client, cerr := client.NewClient(options)
 	if cerr != nil {
-		log.Fatal().Msgf("Failed to create client: %v", cerr)
+		slog.Error("Failed to create client", "error", cerr)
+		os.Exit(1)
 	}
 
 	// Fetch systems from the API
 	ships, err := entities.ListShips(client)
-
 	if err != nil {
-		log.Fatal().Msgf("Failed to list ships: %v", err)
+		slog.Error("Failed to list ships", "error", err)
+		os.Exit(1)
 	}
 
 	for _, ship := range ships {
-		log.Info().Msgf("Ship: %v", ship.Symbol)
-
+		slog.Info("Ship", "symbol", ship.Symbol)
 	}
 
 	ship := ships[0]
 
-	// All reciever functions of the Ship type will update the returned data automatically
+	// All receiver functions of the Ship type will update the returned data automatically
 	// Calling ship.Dock() will update the ship's Nav to "DOCKED" assuming a successful API call
 	_, err = ship.Dock()
 	if err != nil {
-		log.Fatal().Msgf("Failed to dock: %v", err)
+		slog.Error("Failed to dock", "error", err)
+		os.Exit(1)
 	}
 
-	// All reciever functions of the Ship type will also explicitly return the data that the corresponding API call returns
+	// All receiver functions of the Ship type will also explicitly return the data that the corresponding API call returns
 	nav, err := ship.Dock()
 	if err != nil {
-		log.Fatal().Msgf("Failed to get nav: %v", err)
+		slog.Error("Failed to get nav", "error", err)
+		os.Exit(1)
 	}
 
 	// the value of Nav will be the same as the value of ship.Nav
-	log.Info().Msgf("Nav: %v", nav)
-	log.Info().Msgf("Ship NavStatus: %v", ship.Nav)
-
+	slog.Info("Navigation status", "nav", nav, "ship_nav_status", ship.Nav)
 }

@@ -1,4 +1,3 @@
-
 # SpaceTraders API Client
 
 This document provides a basic overview of how to use the SpaceTraders API client in your Go projects.
@@ -23,23 +22,37 @@ To set up a new client for interacting with the SpaceTraders API, follow these s
 
 1. **Import the SpaceTraders client package** into your Go file where you intend to use the client.
 
-2. **Initialize the client**: Create a new instance of the SpaceTraders client by providing the base URL of the SpaceTraders API.
+2. **Initialize the client**: Create a new instance of the SpaceTraders client by providing the necessary configuration options.
 
 ```go
 import(
 	"github.com/jjkirkpatrick/spacetraders-client/client"
-	"github.com/jjkirkpatrick/spacetraders-client/metrics"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
 )
 
+// Basic client setup without telemetry
 options := client.DefaultClientOptions()
-client, cerr := client.NewClient(options, nil)
+options.Symbol = "YOUR-AGENT-SYMBOL"
+options.Faction = "YOUR-FACTION"
+client, err := client.NewClient(options)
+
+// Client setup with OpenTelemetry
+options := client.DefaultClientOptions()
+options.Symbol = "YOUR-AGENT-SYMBOL"
+options.Faction = "YOUR-FACTION"
+options.TelemetryConfig = &telemetry.Config{
+	ServiceName:    "spacetraders-client",
+	ServiceVersion: "1.0.0",
+	OTLPEndpoint:   "localhost:4317",
+	Environment:    "development",
+}
+client, err := client.NewClient(options)
 ```
 
 ### Making Requests
 
-
 ```go
-  // All endpoints from the API are represented with a functionm the returns struct match that as the return model in the API documentation
+  // All endpoints from the API are represented with a function, the returns struct match that as the return model in the API documentation
 	dock, err := client.DockShip("ship-1")
 	if err != nil {
 		logger.Fatalf("Failed to dock ship: %v", err)
@@ -48,9 +61,7 @@ client, cerr := client.NewClient(options, nil)
 	logger.Printf("Docked: %+v", dock.Status)
 ```
 
-
 ### Paginated Requests
-
 
 ```go
   // Create a new paginator for the list of factions endpoint
@@ -59,6 +70,39 @@ client, cerr := client.NewClient(options, nil)
 	for _, faction := range Factions {
 		logger.Printf("Faction: %+v", faction.Symbol)
 	}
+```
+
+## Telemetry and Monitoring
+
+The client supports OpenTelemetry for metrics and logging. This allows you to monitor your application's performance using various backends like Prometheus or any other OpenTelemetry-compatible system.
+
+### Setting Up OpenTelemetry
+
+1. **Configure the Client**: When creating a new client instance, provide the telemetry configuration:
+
+```go
+options := client.DefaultClientOptions()
+options.TelemetryConfig = &telemetry.Config{
+	ServiceName:    "your-service-name",
+	ServiceVersion: "1.0.0",
+	OTLPEndpoint:   "localhost:4317", // Your OpenTelemetry collector endpoint
+	Environment:    "development",
+}
+```
+
+2. **Available Telemetry Data**:
+   - **Metrics**: Request counts, durations, and error rates
+   - **Attributes**: Each metric includes:
+     - Agent symbol
+     - Endpoint information
+     - HTTP method
+     - Status codes
+     - Error details (when applicable)
+
+3. **Graceful Shutdown**: Remember to close the client to ensure all telemetry data is flushed:
+
+```go
+defer client.Close(context.Background())
 ```
 
 For more detailed information on various operations and functionalities within the SpaceTraders universe, refer to the following guides in the Docs folder:
@@ -70,7 +114,6 @@ For more detailed information on various operations and functionalities within t
 - [Agent Operations Guide](Docs/Agent.md): Describes agent-related operations, including listing public agents, retrieving detailed information about the authenticated agent, and understanding agent dynamics within the universe.
 
 These guides serve as comprehensive resources for understanding how to interact with various aspects of the SpaceTraders universe using the provided client methods.
-
 
 ## Metrics Monitoring with InfluxDB and Grafana
 
