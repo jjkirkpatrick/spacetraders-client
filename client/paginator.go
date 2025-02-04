@@ -1,6 +1,9 @@
 package client
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
@@ -68,30 +71,79 @@ func (p *Paginator[T]) getPreviousPage() (*Paginator[T], error) {
 	return p, nil    // Return the same paginator instance
 }
 
-// FetchAllPages fetches all data at once without needing to loop over paginators.
+// FetchAllPages fetches all data concurrently using 4 workers.
 func (p *Paginator[T]) FetchAllPages() ([]T, error) {
-	var allData []T
-
-	currentPage, err := p.fetchFirstPage()
+	// Get first page to determine total pages
+	firstPage, err := p.fetchFirstPage()
 	if err != nil {
 		return nil, err
 	}
 
-	allData = append(allData, currentPage.Data...)
+	totalPages := (firstPage.Meta.Total + firstPage.Meta.Limit - 1) / firstPage.Meta.Limit
 
-	// Loop until no more data is available.
-	for len(currentPage.Data) > 0 {
-		nextPage, err := currentPage.getNextPage()
-		if err != nil {
-			// If an error occurs, stop fetching and return what we have so far along with the error.
+	// Create channels for results and errors
+	results := make(chan []T, totalPages)
+	errors := make(chan error, totalPages)
+	pages := make(chan int, totalPages)
+
+	// Calculate number of workers based on total pages
+	// Use min(totalPages, 8) to avoid creating more workers than needed
+	numWorkers := totalPages
+	if numWorkers > 12 {
+		numWorkers = 12
+	}
+
+	// Start workers based on calculated number
+	for i := 0; i < numWorkers; i++ {
+		go func() {
+			for page := range pages {
+				paginator := &Paginator[T]{
+					Meta:          p.Meta,
+					fetchPageFunc: p.fetchPageFunc,
+				}
+				fmt.Println("Fetching page", page)
+
+				// Try up to 3 times
+				var data *Paginator[T]
+				var err error
+				for retries := 0; retries < 3; retries++ {
+					data, err = paginator.fetchPage(page)
+					if err == nil {
+						break
+					}
+					// Wait a bit before retrying
+					time.Sleep(time.Second * time.Duration(retries+1))
+				}
+
+				if err != nil {
+					errors <- fmt.Errorf("failed to fetch page %d after 3 retries: %w", page, err)
+					continue
+				}
+				results <- data.Data
+			}
+		}()
+	}
+
+	// Send pages to workers
+	go func() {
+		for page := 1; page <= totalPages; page++ {
+			pages <- page
+		}
+		close(pages)
+	}()
+
+	// Collect results
+	var allData []T
+	allData = append(allData, firstPage.Data...)
+
+	// Collect remaining pages
+	for i := 1; i < totalPages; i++ {
+		select {
+		case data := <-results:
+			allData = append(allData, data...)
+		case err := <-errors:
 			return allData, err
 		}
-		// Check if nextPage is empty, indicating no more pages.
-		if len(nextPage.Data) == 0 {
-			break
-		}
-		allData = append(allData, nextPage.Data...)
-		currentPage = nextPage
 	}
 
 	return allData, nil
