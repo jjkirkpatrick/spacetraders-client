@@ -18,7 +18,27 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
+
+// TelemetryOptions represents the configuration options for OpenTelemetry
+type TelemetryOptions struct {
+	// ServiceName is the name of your service (required if telemetry is enabled)
+	ServiceName string
+	// ServiceVersion is the version of your service (optional)
+	ServiceVersion string
+	// Environment is the deployment environment (e.g., "development", "production")
+	Environment string
+	// OTLPEndpoint is the endpoint for your OpenTelemetry collector (required if telemetry is enabled)
+	OTLPEndpoint string
+	// MetricInterval is how often metrics are exported (defaults to 15s)
+	MetricInterval time.Duration
+	// AdditionalAttributes are any extra attributes to add to all telemetry
+	AdditionalAttributes map[string]string
+	// GRPCDialOptions are additional options for the gRPC connection to the collector
+	GRPCDialOptions []grpc.DialOption
+}
 
 // ClientOptions represents the configuration options for the SpaceTraders API client
 type ClientOptions struct {
@@ -30,7 +50,7 @@ type ClientOptions struct {
 	LogLevel          slog.Level
 	RetryDelay        time.Duration
 	// Telemetry configuration (optional)
-	TelemetryConfig *telemetry.Config
+	TelemetryOptions *TelemetryOptions
 }
 
 // Client represents the SpaceTraders API client
@@ -89,7 +109,19 @@ func DefaultClientOptions() ClientOptions {
 		RetryDelay:        1 * time.Second,
 		LogLevel:          slog.LevelInfo,
 		// Telemetry is disabled by default
-		TelemetryConfig: nil,
+		TelemetryOptions: nil,
+	}
+}
+
+// DefaultTelemetryOptions returns the default configuration options for OpenTelemetry
+func DefaultTelemetryOptions() *TelemetryOptions {
+	return &TelemetryOptions{
+		Environment:    "development",
+		MetricInterval: 15 * time.Second,
+		GRPCDialOptions: []grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		},
 	}
 }
 
@@ -120,8 +152,31 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	// Initialize telemetry if configured
-	if options.TelemetryConfig != nil {
-		providers, terr := telemetry.InitTelemetry(client.context, *options.TelemetryConfig)
+	if options.TelemetryOptions != nil {
+		// Convert public options to internal config
+		telemetryConfig := telemetry.Config{
+			ServiceName:    options.TelemetryOptions.ServiceName,
+			ServiceVersion: options.TelemetryOptions.ServiceVersion,
+			Environment:    options.TelemetryOptions.Environment,
+			OTLPEndpoint:   options.TelemetryOptions.OTLPEndpoint,
+			MetricInterval: options.TelemetryOptions.MetricInterval,
+		}
+
+		// Convert additional attributes to KeyValue pairs
+		if options.TelemetryOptions.AdditionalAttributes != nil {
+			attrs := make([]attribute.KeyValue, 0, len(options.TelemetryOptions.AdditionalAttributes))
+			for k, v := range options.TelemetryOptions.AdditionalAttributes {
+				attrs = append(attrs, attribute.String(k, v))
+			}
+			telemetryConfig.AdditionalAttrs = attrs
+		}
+
+		// Add gRPC dial options if provided
+		if options.TelemetryOptions.GRPCDialOptions != nil {
+			telemetryConfig.GRPCDialOptions = options.TelemetryOptions.GRPCDialOptions
+		}
+
+		providers, terr := telemetry.InitTelemetry(client.context, telemetryConfig)
 		if terr != nil {
 			return nil, fmt.Errorf("failed to initialize telemetry: %w", terr)
 		}
