@@ -72,6 +72,9 @@ type Client struct {
 	requestCounter     metric.Int64Counter
 	requestDuration    metric.Float64Histogram
 	errorCounter       metric.Int64Counter
+	rateLimitGauge     metric.Float64ObservableGauge
+	remainingRequests  metric.Int64ObservableGauge
+	resetTimeGauge     metric.Float64ObservableGauge
 }
 
 type RateLimiter struct {
@@ -81,32 +84,24 @@ type RateLimiter struct {
 	// Track API-provided limits
 	limitPerSecond float64
 	limitBurst     int
+	// Track remaining requests
+	remaining int64
+	resetTime time.Time
 }
 
 func NewRateLimiter(staticRate, burstRate float64) *RateLimiter {
 	return &RateLimiter{
-		staticLimiter:  rate.NewLimiter(rate.Limit(staticRate), 2),
-		burstLimiter:   rate.NewLimiter(rate.Limit(burstRate), 30),
+		staticLimiter:  rate.NewLimiter(rate.Limit(staticRate), 2), // Allow bursting up to 2 tokens
+		burstLimiter:   rate.NewLimiter(rate.Limit(burstRate), 30), // Fallback burst limiter for spikes
 		limitPerSecond: staticRate,
 		limitBurst:     30,
+		remaining:      30,
+		resetTime:      time.Now().Add(time.Second),
 	}
-}
-
-func (rl *RateLimiter) Wait(ctx context.Context) error {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	// Always try the static limiter first
-	if err := rl.staticLimiter.Wait(ctx); err == nil {
-		return nil
-	}
-
-	// If static limiter is exhausted, use the burst limiter
-	return rl.burstLimiter.Wait(ctx)
 }
 
 // updateLimits updates the rate limiters based on API response
-func (rl *RateLimiter) updateLimits(limitPerSecond float64, limitBurst int) {
+func (rl *RateLimiter) updateLimits(limitPerSecond float64, limitBurst int, remaining int64, resetTime time.Time) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
@@ -115,10 +110,20 @@ func (rl *RateLimiter) updateLimits(limitPerSecond float64, limitBurst int) {
 		rl.staticLimiter = rate.NewLimiter(rate.Limit(limitPerSecond), 2)
 	}
 
-	if limitBurst > 0 && limitBurst != rl.limitBurst {
-		rl.limitBurst = limitBurst
-		rl.burstLimiter = rate.NewLimiter(rate.Limit(0.5), limitBurst)
-	}
+	rl.remaining = remaining
+	rl.resetTime = resetTime
+}
+
+func (rl *RateLimiter) getRemainingRequests() int64 {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	return rl.remaining
+}
+
+func (rl *RateLimiter) getResetTime() time.Time {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	return rl.resetTime
 }
 
 // DefaultClientOptions returns the default configuration options for the SpaceTraders API client
@@ -137,7 +142,7 @@ func DefaultClientOptions() ClientOptions {
 func DefaultTelemetryOptions() *TelemetryOptions {
 	return &TelemetryOptions{
 		Environment:    "development",
-		MetricInterval: 15 * time.Second,
+		MetricInterval: 1 * time.Second,
 		GRPCDialOptions: []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
@@ -168,7 +173,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		AgentSymbol: options.Symbol,
 		CacheClient: cache.NewCache(),
 		Logger:      slog.New(handler),
-		RateLimiter: NewRateLimiter(2, 0.5),
+		RateLimiter: NewRateLimiter(2, 30),
 	}
 
 	// Initialize telemetry if configured
@@ -214,9 +219,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 			return nil, fmt.Errorf("failed to create request counter: %w", merr)
 		}
 
-		client.requestDuration, merr = client.meter.Float64Histogram("api_request_duration",
-			metric.WithDescription("Duration of API requests"),
-			metric.WithUnit("ms"),
+		client.requestDuration, merr = client.meter.Float64Histogram("api_request_duration_seconds",
+			metric.WithDescription("Duration of API requests in seconds"),
+			metric.WithUnit("s"),
+			metric.WithExplicitBucketBoundaries(0.01, 0.05, 0.1, 0.5, 1, 2.5, 5, 10),
 		)
 		if merr != nil {
 			return nil, fmt.Errorf("failed to create request duration histogram: %w", merr)
@@ -228,6 +234,54 @@ func NewClient(options ClientOptions) (*Client, error) {
 		)
 		if merr != nil {
 			return nil, fmt.Errorf("failed to create error counter: %w", merr)
+		}
+
+		client.rateLimitGauge, merr = client.meter.Float64ObservableGauge("api_rate_limit",
+			metric.WithDescription("Current API rate limit settings"),
+			metric.WithUnit("{requests_per_second}"),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create rate limit gauge: %w", merr)
+		}
+
+		client.remainingRequests, merr = client.meter.Int64ObservableGauge("api_remaining_requests",
+			metric.WithDescription("Number of API requests remaining before rate limit"),
+			metric.WithUnit("{requests}"),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create remaining requests gauge: %w", merr)
+		}
+
+		client.resetTimeGauge, merr = client.meter.Float64ObservableGauge("api_rate_limit_reset",
+			metric.WithDescription("Time until rate limit reset in seconds"),
+			metric.WithUnit("s"),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create reset time gauge: %w", merr)
+		}
+
+		_, err := client.meter.RegisterCallback(func(_ context.Context, o metric.Observer) error {
+			o.ObserveFloat64(client.rateLimitGauge, client.RateLimiter.limitPerSecond,
+				metric.WithAttributes(
+					attribute.String("type", "static"),
+					attribute.String("agent", client.AgentSymbol),
+				))
+			o.ObserveInt64(client.remainingRequests, client.RateLimiter.getRemainingRequests(),
+				metric.WithAttributes(
+					attribute.String("type", "static"),
+					attribute.String("agent", client.AgentSymbol),
+				))
+			resetTime := client.RateLimiter.getResetTime()
+			if !resetTime.IsZero() {
+				o.ObserveFloat64(client.resetTimeGauge, time.Until(resetTime).Seconds(),
+					metric.WithAttributes(
+						attribute.String("agent", client.AgentSymbol),
+					))
+			}
+			return nil
+		}, client.rateLimitGauge, client.remainingRequests, client.resetTimeGauge)
+		if err != nil {
+			return nil, fmt.Errorf("failed to register metric callbacks: %w", err)
 		}
 	}
 
@@ -285,6 +339,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 	var resp *resty.Response
 	var apiError *models.APIError
 	var err error
+	var rateLimit *RateLimitResponse
 
 	// Wait for rate limit token - this will block until we can make the request
 	if err := c.RateLimiter.Wait(c.context); err != nil {
@@ -299,8 +354,27 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 	statusCode := 500
 	if resp != nil {
 		statusCode = resp.StatusCode()
+
+		// Extract rate limit information from headers if available
+		if remaining := resp.Header().Get("x-ratelimit-remaining"); remaining != "" {
+			if rem, parseErr := strconv.ParseInt(remaining, 10, 64); parseErr == nil {
+				rateLimit = &RateLimitResponse{
+					Remaining: rem,
+				}
+			}
+		}
+		if reset := resp.Header().Get("x-ratelimit-reset"); reset != "" {
+			if resetTime, parseErr := time.Parse(time.RFC3339, reset); parseErr == nil {
+				if rateLimit == nil {
+					rateLimit = &RateLimitResponse{}
+				}
+				rateLimit.Reset = resetTime
+			}
+		}
 	}
-	c.recordMetrics(method, endpoint, duration, statusCode, err)
+
+	// Record metrics with rate limit information
+	c.recordMetrics(method, endpoint, duration, statusCode, err, rateLimit)
 
 	// If successful, return immediately
 	if err == nil && !resp.IsError() {
@@ -312,36 +386,43 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 		// Parse the rate limit error details
 		apiError = parseAPIError(resp)
 		if apiError != nil && apiError.Data != nil {
-			// Update our rate limiters based on the API response
+			// Update rate limit information from error response
 			if limitPerSecond, ok := apiError.Data["limitPerSecond"].(float64); ok {
 				if limitBurst, ok := apiError.Data["limitBurst"].(float64); ok {
+					if rateLimit == nil {
+						rateLimit = &RateLimitResponse{}
+					}
+					rateLimit.LimitPerSecond = limitPerSecond
+					rateLimit.LimitBurst = int(limitBurst)
+
+					if remaining, ok := apiError.Data["remaining"].(float64); ok {
+						rateLimit.Remaining = int64(remaining)
+					}
+
+					if resetTimeStr, ok := apiError.Data["reset"].(string); ok {
+						if resetTime, parseErr := time.Parse(time.RFC3339, resetTimeStr); parseErr == nil {
+							rateLimit.Reset = resetTime
+						}
+					}
+
 					c.Logger.Debug("Updating rate limits from API response",
 						"limitPerSecond", limitPerSecond,
-						"limitBurst", int(limitBurst))
-					c.RateLimiter.updateLimits(limitPerSecond, int(limitBurst))
-				}
-			}
+						"limitBurst", int(limitBurst),
+						"remaining", rateLimit.Remaining,
+						"reset", rateLimit.Reset)
 
-			// Get the retry after duration
-			if retryAfter, ok := apiError.Data["retryAfter"].(float64); ok {
-				waitDuration := time.Duration(retryAfter * float64(time.Second))
-				c.Logger.Debug("Rate limit exceeded, waiting as specified by API",
-					"wait_duration", waitDuration)
-				time.Sleep(waitDuration)
+					// Update our rate limiter with the new information
+					c.RateLimiter.updateLimits(
+						rateLimit.LimitPerSecond,
+						rateLimit.LimitBurst,
+						rateLimit.Remaining,
+						rateLimit.Reset,
+					)
 
-				// Retry the request once after waiting
-				resp, err = request.Execute(method, c.baseURL+endpoint)
-				if err == nil && !resp.IsError() {
-					return nil
-				}
-			} else {
-				// Fallback to using reset time if retryAfter is not available
-				if resetTimeStr, ok := apiError.Data["reset"].(string); ok {
-					if resetTime, parseErr := time.Parse(time.RFC3339, resetTimeStr); parseErr == nil {
-						waitDuration := time.Until(resetTime)
-						// Add a small buffer to ensure we're past the reset time
-						waitDuration += 100 * time.Millisecond
-						c.Logger.Debug("Rate limit exceeded, waiting until reset time",
+					// Wait for the specified retry time
+					if retryAfter, ok := apiError.Data["retryAfter"].(float64); ok {
+						waitDuration := time.Duration(retryAfter * float64(time.Second))
+						c.Logger.Debug("Rate limit exceeded, waiting as specified by API",
 							"wait_duration", waitDuration)
 						time.Sleep(waitDuration)
 
@@ -368,7 +449,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 	return nil
 }
 
-func (c *Client) recordMetrics(method, endpoint string, duration time.Duration, statusCode int, err error) {
+func (c *Client) recordMetrics(method, endpoint string, duration time.Duration, statusCode int, err error, rateLimit *RateLimitResponse) {
 	if c.meter == nil {
 		return // Telemetry is disabled
 	}
@@ -377,17 +458,36 @@ func (c *Client) recordMetrics(method, endpoint string, duration time.Duration, 
 		attribute.String("agent", c.AgentSymbol),
 		attribute.String("endpoint", endpoint),
 		attribute.String("method", method),
+		attribute.Int("status_code", statusCode),
 	}
 
 	c.requestCounter.Add(c.context, 1, metric.WithAttributes(attrs...))
-	c.requestDuration.Record(c.context, float64(duration.Milliseconds()), metric.WithAttributes(attrs...))
+	c.requestDuration.Record(c.context, duration.Seconds(), metric.WithAttributes(attrs...))
 
+	// Record rate limit metrics if available
+	if rateLimit != nil {
+		c.RateLimiter.updateLimits(
+			rateLimit.LimitPerSecond,
+			rateLimit.LimitBurst,
+			rateLimit.Remaining,
+			rateLimit.Reset,
+		)
+	}
+
+	// Record errors with enhanced context
 	if err != nil || statusCode >= 400 {
 		errorAttrs := append(attrs,
-			attribute.Int("status_code", statusCode),
+			attribute.Int("error_code", statusCode),
 		)
 		if err != nil {
-			errorAttrs = append(errorAttrs, attribute.String("error", err.Error()))
+			errorAttrs = append(errorAttrs,
+				attribute.String("error_type", "client"),
+				attribute.String("error_message", err.Error()),
+			)
+		} else {
+			errorAttrs = append(errorAttrs,
+				attribute.String("error_type", "server"),
+			)
 		}
 		c.errorCounter.Add(c.context, 1, metric.WithAttributes(errorAttrs...))
 	}
@@ -457,4 +557,30 @@ func (c *Client) Close(ctx context.Context) error {
 		return c.telemetryProviders.Shutdown(ctx)
 	}
 	return nil
+}
+
+// RateLimitResponse represents the rate limit information from the API
+type RateLimitResponse struct {
+	LimitPerSecond float64
+	LimitBurst     int
+	Remaining      int64
+	Reset          time.Time
+}
+
+func (rl *RateLimiter) Wait(ctx context.Context) error {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	// Try static limiter first - this maintains our 2/s rate with bursting
+	if err := rl.staticLimiter.Wait(ctx); err == nil {
+		rl.remaining--
+		return nil
+	}
+
+	// If static limiter is exhausted, try burst limiter
+	err := rl.burstLimiter.Wait(ctx)
+	if err == nil {
+		rl.remaining--
+	}
+	return err
 }

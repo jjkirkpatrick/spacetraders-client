@@ -31,6 +31,7 @@ func newMetricsApp(ctx context.Context) (*MetricsApp, error) {
 	options.TelemetryOptions.ServiceName = "spacetraders-metrics"
 	options.TelemetryOptions.ServiceVersion = "1.0.0"
 	options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
+	options.TelemetryOptions.MetricInterval = 1 * time.Second
 
 	spaceClient, err := client.NewClient(options)
 	if err != nil {
@@ -69,7 +70,7 @@ func (app *MetricsApp) run(ctx context.Context) error {
 	app.client.Logger.Info("Starting metrics collection loop")
 
 	// Get agent details and collect metrics
-	for i := 0; i < 40; i++ {
+	for i := 0; i < 2000; i++ {
 		app.client.Logger.Info("Starting iteration", "iteration", i)
 
 		// No need for artificial delays - the rate limiter in the client will handle pacing
