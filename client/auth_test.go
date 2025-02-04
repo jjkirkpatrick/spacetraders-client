@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jjkirkpatrick/spacetraders-client/internal/cache"
-	"github.com/jjkirkpatrick/spacetraders-client/internal/metrics"
 )
 
 func TestGetOrRegisterToken(t *testing.T) {
@@ -19,12 +18,11 @@ func TestGetOrRegisterToken(t *testing.T) {
 	options.Faction = "COSMIC"
 
 	client := &Client{
-		baseURL:         options.BaseURL,
-		httpClient:      resty.New(),
-		context:         context.Background(),
-		retryDelay:      options.RetryDelay,
-		MetricsReporter: &metrics.NoOpMetricsReporter{},
-		CacheClient:     cache.NewCache(),
+		baseURL:     options.BaseURL,
+		httpClient:  resty.New(),
+		context:     context.Background(),
+		retryDelay:  options.RetryDelay,
+		CacheClient: cache.NewCache(),
 	}
 
 	// Test for valid faction and symbol
@@ -54,12 +52,11 @@ func TestTokenFileOperations(t *testing.T) {
 	options.Faction = "COSMIC"
 
 	client := &Client{
-		baseURL:         options.BaseURL,
-		httpClient:      resty.New(),
-		context:         context.Background(),
-		retryDelay:      options.RetryDelay,
-		MetricsReporter: &metrics.NoOpMetricsReporter{},
-		CacheClient:     cache.NewCache(),
+		baseURL:     options.BaseURL,
+		httpClient:  resty.New(),
+		context:     context.Background(),
+		retryDelay:  options.RetryDelay,
+		CacheClient: cache.NewCache(),
 	}
 
 	// Ensure token file is clean before tests

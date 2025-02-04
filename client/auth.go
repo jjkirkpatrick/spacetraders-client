@@ -35,7 +35,7 @@ type TokenFile struct {
 
 // GetOrRegisterToken retrieves the token for the given symbol from the token file or registers a new agent if the token doesn't exist
 func (c *Client) getOrRegisterToken(faction, symbol, email string) error {
-	c.Logger.Debug().Msg("Attempting to get or register token")
+	c.Logger.Debug("Attempting to get or register token", "faction", faction, "symbol", symbol, "email", email)
 
 	if faction == "" || symbol == "" {
 		return fmt.Errorf("faction and symbol must be set")
@@ -75,7 +75,6 @@ func (c *Client) getOrRegisterToken(faction, symbol, email string) error {
 
 	var registerResp RegisterResponse
 
-	c.Logger.Trace().Msgf("Requesting token with symbol: %s, faction: %s", symbol, faction)
 	apiErr := c.Post("/register", registerReq, nil, &registerResp)
 	if apiErr != nil {
 		return apiErr

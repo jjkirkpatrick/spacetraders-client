@@ -4,31 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/rand"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jjkirkpatrick/spacetraders-client/internal/cache"
-	"github.com/jjkirkpatrick/spacetraders-client/internal/metrics"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
 	"github.com/jjkirkpatrick/spacetraders-client/models"
-	"github.com/phuslu/log"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/time/rate"
 )
-
-// Client represents the SpaceTraders API client
-type Client struct {
-	context         context.Context
-	baseURL         string
-	token           string
-	httpClient      *resty.Client
-	retryDelay      time.Duration
-	AgentSymbol     string
-	MetricsReporter metrics.MetricsReporter
-	CacheClient     *cache.Cache
-	Logger          *log.Logger
-	RateLimiter     *RateLimiter
-}
 
 // ClientOptions represents the configuration options for the SpaceTraders API client
 type ClientOptions struct {
@@ -37,8 +27,30 @@ type ClientOptions struct {
 	Faction           string
 	Email             string
 	RequestsPerSecond float32
-	LogLevel          log.Level
+	LogLevel          slog.Level
 	RetryDelay        time.Duration
+	// Telemetry configuration (optional)
+	TelemetryConfig *telemetry.Config
+}
+
+// Client represents the SpaceTraders API client
+type Client struct {
+	context     context.Context
+	baseURL     string
+	token       string
+	httpClient  *resty.Client
+	retryDelay  time.Duration
+	AgentSymbol string
+	CacheClient *cache.Cache
+	Logger      *slog.Logger
+	RateLimiter *RateLimiter
+
+	// Telemetry (metrics only)
+	telemetryProviders *telemetry.Providers
+	meter              metric.Meter
+	requestCounter     metric.Int64Counter
+	requestDuration    metric.Float64Histogram
+	errorCounter       metric.Int64Counter
 }
 
 type RateLimiter struct {
@@ -75,19 +87,11 @@ func DefaultClientOptions() ClientOptions {
 		BaseURL:           "https://api.spacetraders.io/v2",
 		RequestsPerSecond: 2,
 		RetryDelay:        1 * time.Second,
+		LogLevel:          slog.LevelInfo,
+		// Telemetry is disabled by default
+		TelemetryConfig: nil,
 	}
 }
-
-type Glog struct {
-	Logger log.Logger
-}
-
-var glog = &Glog{log.Logger{
-	Level:      log.InfoLevel,
-	Caller:     1,
-	TimeFormat: "15:04:05.999999",
-	Writer:     &log.ConsoleWriter{ColorOutput: true, Formatter: Logformat},
-}}
 
 // NewClient creates a new instance of the SpaceTraders API client
 func NewClient(options ClientOptions) (*Client, error) {
@@ -95,38 +99,71 @@ func NewClient(options ClientOptions) (*Client, error) {
 		return nil, fmt.Errorf("symbol is required")
 	}
 
+	// Configure basic slog handler
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: options.LogLevel,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			return a
+		},
+	})
+
+	// Create initial client with basic logging
 	client := &Client{
-		baseURL:         options.BaseURL,
-		httpClient:      resty.New(),
-		context:         context.Background(),
-		retryDelay:      options.RetryDelay,
-		AgentSymbol:     options.Symbol,
-		MetricsReporter: &metrics.NoOpMetricsReporter{},
-		CacheClient:     cache.NewCache(),
-		Logger:          &glog.Logger,
+		baseURL:     options.BaseURL,
+		httpClient:  resty.New(),
+		context:     context.Background(),
+		retryDelay:  options.RetryDelay,
+		AgentSymbol: options.Symbol,
+		CacheClient: cache.NewCache(),
+		Logger:      slog.New(handler),
+		RateLimiter: NewRateLimiter(2, 0.5),
 	}
 
-	client.Logger.SetLevel(options.LogLevel)
-	client.RateLimiter = NewRateLimiter(2, 0.5) // Corresponding to the static and burst rate limits
+	// Initialize telemetry if configured
+	if options.TelemetryConfig != nil {
+		providers, terr := telemetry.InitTelemetry(client.context, *options.TelemetryConfig)
+		if terr != nil {
+			return nil, fmt.Errorf("failed to initialize telemetry: %w", terr)
+		}
+		client.telemetryProviders = providers
 
-	err := client.getOrRegisterToken(options.Faction, options.Symbol, options.Email)
+		// Initialize metrics and tracer
+		client.meter = otel.GetMeterProvider().Meter("spacetraders-client")
 
-	if err != nil {
-		client.Logger.Error().Msgf("Failed to register or get token: %v", err)
-		return nil, err
+		var merr error
+		client.requestCounter, merr = client.meter.Int64Counter("api_requests_total",
+			metric.WithDescription("Total number of API requests made"),
+			metric.WithUnit("{requests}"),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create request counter: %w", merr)
+		}
+
+		client.requestDuration, merr = client.meter.Float64Histogram("api_request_duration",
+			metric.WithDescription("Duration of API requests"),
+			metric.WithUnit("ms"),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create request duration histogram: %w", merr)
+		}
+
+		client.errorCounter, merr = client.meter.Int64Counter("api_errors_total",
+			metric.WithDescription("Total number of API errors"),
+			metric.WithUnit("{errors}"),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create error counter: %w", merr)
+		}
 	}
 
-	client.Logger.Debug().Msgf("New SpaceTraders client initialized with baseURL: %s, rateLimit: %f requests/second", client.baseURL, options.RequestsPerSecond)
+	if apiError := client.getOrRegisterToken(options.Faction, options.Symbol, options.Email); apiError != nil {
+		return nil, apiError
+	}
+
+	client.Logger.Info("New SpaceTraders client initialized",
+		"baseURL", client.baseURL,
+		"rateLimit", options.RequestsPerSecond)
 	return client, nil
-}
-
-func (c *Client) MetricBuilder() *metrics.MetricBuilder {
-	return metrics.NewMetricBuilder()
-}
-
-func (c *Client) ConfigureMetricsClient(url, token, org, bucket string) {
-	c.MetricsReporter = metrics.NewMetricsClient(url, token, org, bucket)
-	c.Logger.Trace().Msg("Metrics client configured successfully.")
 }
 
 // Get sends a GET request to the specified endpoint with optional query parameters
@@ -155,6 +192,7 @@ func (c *Client) Patch(endpoint string, body interface{}, queryParams map[string
 }
 
 func (c *Client) sendRequest(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+	startTime := time.Now()
 
 	request := c.httpClient.R().
 		SetHeader("Accept", "application/json").
@@ -175,40 +213,73 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 
 	backoff := c.retryDelay
 	for {
-		c.Logger.Trace().Msgf("Sending request: %s %s : Request inputs: %s : request Params: %s", method, c.baseURL+endpoint, request.Body, request.QueryParam)
+		c.Logger.Debug("Client Log: Sending request",
+			"method", method,
+			"url", c.baseURL+endpoint,
+			"body", request.Body,
+			"params", request.QueryParam)
+
 		err = c.RateLimiter.Wait(c.context)
 		if err != nil {
-			c.Logger.Error().Msg("Rate limiter error: " + err.Error())
+			c.Logger.Error("Client Log: Rate limiter error", "error", err)
 			return &models.APIError{Message: err.Error(), Code: 429}
 		}
 
-		c.MetricsReporter.Increment("api_requests_total", map[string]string{"agent": c.AgentSymbol, "endpoint": endpoint, "method": method}, 1)
-
 		resp, err = request.Execute(method, c.baseURL+endpoint)
+		duration := time.Since(startTime)
+
+		statusCode := 500
+		if resp != nil {
+			statusCode = resp.StatusCode()
+		}
+		c.recordMetrics(method, endpoint, duration, statusCode, err)
 
 		if err == nil && !resp.IsError() {
-			c.MetricsReporter.Increment("api_requests_success", map[string]string{"agent": c.AgentSymbol, "endpoint": endpoint, "method": method}, 1)
 			return nil // Success
 		}
 
 		if resp.StatusCode() == 429 {
-			c.Logger.Warn().Msg("Rate limit exceeded, handling rate limit.")
+			c.Logger.Warn("Client Log: Rate limit exceeded, handling rate limit")
 			handleRateLimit(resp, c.Logger)
 			continue
 		}
 
 		if resp.IsError() {
 			apiError = parseAPIError(resp)
-			c.MetricsReporter.Increment("api_requests_errors", map[string]string{"agent": c.AgentSymbol, "method": method, "status_code": fmt.Sprintf("%d", resp.StatusCode()), "error_type": apiError.Error()}, 1)
-			c.Logger.Error().Err(apiError.AsError()).Msgf("API Request resulted in error : %s : data %s", apiError.AsError(), apiError.Data)
-
+			c.Logger.Error("Client Log: API Request resulted in error",
+				"error", apiError.Error(),
+				"data", apiError.Data)
 			return apiError
 		}
 
-		// Apply random jitter to backoff
 		backoff = applyJitter(backoff)
 		time.Sleep(backoff)
-		backoff *= 2 // Exponential backoff
+		backoff *= 2
+	}
+}
+
+func (c *Client) recordMetrics(method, endpoint string, duration time.Duration, statusCode int, err error) {
+	if c.meter == nil {
+		return // Telemetry is disabled
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String("agent", c.AgentSymbol),
+		attribute.String("endpoint", endpoint),
+		attribute.String("method", method),
+	}
+
+	c.requestCounter.Add(c.context, 1, metric.WithAttributes(attrs...))
+	c.requestDuration.Record(c.context, float64(duration.Milliseconds()), metric.WithAttributes(attrs...))
+
+	if err != nil || statusCode >= 400 {
+		errorAttrs := append(attrs,
+			attribute.Int("status_code", statusCode),
+		)
+		if err != nil {
+			errorAttrs = append(errorAttrs, attribute.String("error", err.Error()))
+		}
+		c.errorCounter.Add(c.context, 1, metric.WithAttributes(errorAttrs...))
 	}
 }
 
@@ -219,12 +290,13 @@ func applyJitter(backoff time.Duration) time.Duration {
 }
 
 // Helper function to handle rate limit errors
-func handleRateLimit(resp *resty.Response, logger *log.Logger) {
+func handleRateLimit(resp *resty.Response, logger *slog.Logger) {
 	resetTime := resp.Header().Get("x-ratelimit-reset")
 	if resetTime != "" {
 		if resetTimestamp, parseErr := strconv.ParseInt(resetTime, 10, 64); parseErr == nil {
 			waitDuration := time.Until(time.Unix(resetTimestamp, 0))
-			logger.Debug().Msgf("Rate limit exceeded. Waiting until reset: %v", waitDuration)
+			logger.Debug("Rate limit exceeded, waiting until reset",
+				"wait_duration", waitDuration)
 			time.Sleep(waitDuration)
 		}
 	}
@@ -233,15 +305,26 @@ func handleRateLimit(resp *resty.Response, logger *log.Logger) {
 // Helper function to parse API error from response
 func parseAPIError(resp *resty.Response) *models.APIError {
 	var errorWrapper struct {
-		Error models.APIError `json:"error"`
+		Error struct {
+			Code    int                    `json:"code"`
+			Message string                 `json:"message"`
+			Data    map[string]interface{} `json:"data"`
+		} `json:"error"`
 	}
+
 	err := json.Unmarshal(resp.Body(), &errorWrapper)
-
 	if err != nil {
-		return &models.APIError{Message: "failed to parse API error response", Code: resp.StatusCode()}
+		return &models.APIError{
+			Message: "failed to parse API error response",
+			Code:    resp.StatusCode(),
+		}
 	}
 
-	return &errorWrapper.Error
+	return &models.APIError{
+		Code:    errorWrapper.Error.Code,
+		Message: errorWrapper.Error.Message,
+		Data:    errorWrapper.Error.Data,
+	}
 }
 
 // Adjust isRateLimitError to include more transient errors if needed
@@ -249,10 +332,14 @@ func isRateLimitError(statusCode int) bool {
 	return statusCode == 429 || statusCode == 502
 }
 
-func (c *Client) WriteMetric(metric metrics.Metric) {
-	c.MetricsReporter.WritePoint(metric)
-}
-
 func (c *Client) GetToken() string {
 	return c.token
+}
+
+// Close gracefully shuts down the client and its telemetry providers
+func (c *Client) Close(ctx context.Context) error {
+	if c.telemetryProviders != nil {
+		return c.telemetryProviders.Shutdown(ctx)
+	}
+	return nil
 }
