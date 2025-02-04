@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"os"
 	"strconv"
 	"sync"
@@ -87,6 +86,8 @@ type RateLimiter struct {
 	// Track remaining requests
 	remaining int64
 	resetTime time.Time
+	// Add a channel to coordinate waiting for reset
+	resetChan chan struct{}
 }
 
 func NewRateLimiter(staticRate, burstRate float64) *RateLimiter {
@@ -97,33 +98,79 @@ func NewRateLimiter(staticRate, burstRate float64) *RateLimiter {
 		limitBurst:     30,
 		remaining:      30,
 		resetTime:      time.Now().Add(time.Second),
+		resetChan:      make(chan struct{}),
 	}
 }
 
-// updateLimits updates the rate limiters based on API response
+func (rl *RateLimiter) Wait(ctx context.Context) error {
+	rl.mu.Lock()
+	// If we have no remaining requests, we need to wait for reset
+	if rl.remaining <= 0 {
+		resetDuration := time.Until(rl.resetTime)
+		if resetDuration > 0 {
+			rl.mu.Unlock()
+			// Add a smaller buffer to ensure we're past the reset
+			waitDuration := resetDuration + 15*time.Millisecond
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(waitDuration):
+				// After waiting, reacquire lock and reset remaining
+				rl.mu.Lock()
+				rl.remaining = int64(rl.limitBurst)
+			}
+		}
+	}
+
+	// Use the static limiter to maintain steady rate
+	err := rl.staticLimiter.Wait(ctx)
+	if err != nil {
+		rl.mu.Unlock()
+		return err
+	}
+
+	// Only decrement remaining if we're getting close to the limit
+	// This allows full utilization of the 2/s rate while still protecting against bursts
+	if rl.remaining < int64(rl.limitBurst/2) {
+		rl.remaining--
+	}
+
+	rl.mu.Unlock()
+	return nil
+}
+
 func (rl *RateLimiter) updateLimits(limitPerSecond float64, limitBurst int, remaining int64, resetTime time.Time) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
 	if limitPerSecond > 0 && limitPerSecond != rl.limitPerSecond {
 		rl.limitPerSecond = limitPerSecond
+		// Allow bursting up to 2 requests, which matches the API's per-second rate
 		rl.staticLimiter = rate.NewLimiter(rate.Limit(limitPerSecond), 2)
+	}
+
+	if limitBurst > 0 {
+		rl.limitBurst = limitBurst
 	}
 
 	rl.remaining = remaining
 	rl.resetTime = resetTime
-}
 
-func (rl *RateLimiter) getRemainingRequests() int64 {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	return rl.remaining
-}
-
-func (rl *RateLimiter) getResetTime() time.Time {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	return rl.resetTime
+	// If we're at 0 remaining, start a timer to reset
+	if rl.remaining <= 0 && !resetTime.IsZero() {
+		go func() {
+			waitDuration := time.Until(resetTime) + time.Millisecond
+			time.Sleep(waitDuration)
+			rl.mu.Lock()
+			rl.remaining = int64(rl.limitBurst)
+			rl.mu.Unlock()
+			// Notify any waiters
+			select {
+			case rl.resetChan <- struct{}{}:
+			default:
+			}
+		}()
+	}
 }
 
 // DefaultClientOptions returns the default configuration options for the SpaceTraders API client
@@ -266,12 +313,12 @@ func NewClient(options ClientOptions) (*Client, error) {
 					attribute.String("type", "static"),
 					attribute.String("agent", client.AgentSymbol),
 				))
-			o.ObserveInt64(client.remainingRequests, client.RateLimiter.getRemainingRequests(),
+			o.ObserveInt64(client.remainingRequests, client.RateLimiter.remaining,
 				metric.WithAttributes(
 					attribute.String("type", "static"),
 					attribute.String("agent", client.AgentSymbol),
 				))
-			resetTime := client.RateLimiter.getResetTime()
+			resetTime := client.RateLimiter.resetTime
 			if !resetTime.IsZero() {
 				o.ObserveFloat64(client.resetTimeGauge, time.Until(resetTime).Seconds(),
 					metric.WithAttributes(
@@ -421,7 +468,7 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 
 					// Wait for the specified retry time
 					if retryAfter, ok := apiError.Data["retryAfter"].(float64); ok {
-						waitDuration := time.Duration(retryAfter * float64(time.Second))
+						waitDuration := time.Duration(retryAfter * float64(time.Millisecond))
 						c.Logger.Debug("Rate limit exceeded, waiting as specified by API",
 							"wait_duration", waitDuration)
 						time.Sleep(waitDuration)
@@ -493,30 +540,6 @@ func (c *Client) recordMetrics(method, endpoint string, duration time.Duration, 
 	}
 }
 
-// Helper function to apply jitter to backoff
-func applyJitter(backoff time.Duration) time.Duration {
-	jitter := time.Duration(rand.Int63n(int64(backoff)))
-	return backoff + jitter/2
-}
-
-// Helper function to handle rate limit errors
-func handleRateLimit(resp *resty.Response, logger *slog.Logger) {
-	resetTime := resp.Header().Get("x-ratelimit-reset")
-	if resetTime != "" {
-		if resetTimestamp, parseErr := strconv.ParseInt(resetTime, 10, 64); parseErr == nil {
-			waitDuration := time.Until(time.Unix(resetTimestamp, 0))
-			// Add a small buffer to ensure we're past the reset time
-			waitDuration += 100 * time.Millisecond
-			logger.Debug("Rate limit exceeded, waiting until reset",
-				"wait_duration", waitDuration)
-			time.Sleep(waitDuration)
-		}
-	} else {
-		// If no reset time is provided, use a default backoff
-		time.Sleep(2 * time.Second)
-	}
-}
-
 // Helper function to parse API error from response
 func parseAPIError(resp *resty.Response) *models.APIError {
 	var errorWrapper struct {
@@ -565,22 +588,4 @@ type RateLimitResponse struct {
 	LimitBurst     int
 	Remaining      int64
 	Reset          time.Time
-}
-
-func (rl *RateLimiter) Wait(ctx context.Context) error {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	// Try static limiter first - this maintains our 2/s rate with bursting
-	if err := rl.staticLimiter.Wait(ctx); err == nil {
-		rl.remaining--
-		return nil
-	}
-
-	// If static limiter is exhausted, try burst limiter
-	err := rl.burstLimiter.Wait(ctx)
-	if err == nil {
-		rl.remaining--
-	}
-	return err
 }
