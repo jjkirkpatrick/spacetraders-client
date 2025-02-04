@@ -27,7 +27,6 @@ To set up a new client for interacting with the SpaceTraders API, follow these s
 ```go
 import(
 	"github.com/jjkirkpatrick/spacetraders-client/client"
-	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
 )
 
 // Basic client setup without telemetry
@@ -40,12 +39,20 @@ client, err := client.NewClient(options)
 options := client.DefaultClientOptions()
 options.Symbol = "YOUR-AGENT-SYMBOL"
 options.Faction = "YOUR-FACTION"
-options.TelemetryConfig = &telemetry.Config{
-	ServiceName:    "spacetraders-client",
-	ServiceVersion: "1.0.0",
-	OTLPEndpoint:   "localhost:4317",
-	Environment:    "development",
+
+// Initialize telemetry with default options
+options.TelemetryOptions = client.DefaultTelemetryOptions()
+options.TelemetryOptions.ServiceName = "spacetraders-client"
+options.TelemetryOptions.ServiceVersion = "1.0.0"
+options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
+options.TelemetryOptions.Environment = "development"
+
+// Optional: Add custom attributes
+options.TelemetryOptions.AdditionalAttributes = map[string]string{
+    "deployment": "us-west",
+    "team": "platform",
 }
+
 client, err := client.NewClient(options)
 ```
 
@@ -78,15 +85,24 @@ The client supports OpenTelemetry for metrics and logging. This allows you to mo
 
 ### Setting Up OpenTelemetry
 
-1. **Configure the Client**: When creating a new client instance, provide the telemetry configuration:
+1. **Configure the Client**: When creating a new client instance, you can use the default telemetry options and customize them:
 
 ```go
 options := client.DefaultClientOptions()
-options.TelemetryConfig = &telemetry.Config{
-	ServiceName:    "your-service-name",
-	ServiceVersion: "1.0.0",
-	OTLPEndpoint:   "localhost:4317", // Your OpenTelemetry collector endpoint
-	Environment:    "development",
+
+// Get default telemetry options with sensible defaults
+options.TelemetryOptions = client.DefaultTelemetryOptions()
+
+// Customize the options as needed
+options.TelemetryOptions.ServiceName = "your-service-name"
+options.TelemetryOptions.ServiceVersion = "1.0.0"
+options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
+options.TelemetryOptions.Environment = "production"
+
+// Optional: Add custom attributes that will be included in all telemetry
+options.TelemetryOptions.AdditionalAttributes = map[string]string{
+    "deployment": "us-west",
+    "team": "platform",
 }
 ```
 
@@ -98,6 +114,7 @@ options.TelemetryConfig = &telemetry.Config{
      - HTTP method
      - Status codes
      - Error details (when applicable)
+     - Any additional attributes you configured
 
 3. **Graceful Shutdown**: Remember to close the client to ensure all telemetry data is flushed:
 

@@ -11,7 +11,6 @@ import (
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
-	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -27,11 +26,12 @@ func newMetricsApp(ctx context.Context) (*MetricsApp, error) {
 	options := client.DefaultClientOptions()
 	options.Symbol = "METRICS_TEST"
 	options.Faction = "COSMIC"
-	options.TelemetryConfig = &telemetry.Config{
-		ServiceName:    "spacetraders-metrics",
-		ServiceVersion: "1.0.0",
-		OTLPEndpoint:   "localhost:4317",
-	}
+
+	// Initialize telemetry with the new public options
+	options.TelemetryOptions = client.DefaultTelemetryOptions()
+	options.TelemetryOptions.ServiceName = "spacetraders-metrics"
+	options.TelemetryOptions.ServiceVersion = "1.0.0"
+	options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
 
 	spaceClient, err := client.NewClient(options)
 	if err != nil {

@@ -12,7 +12,6 @@ import (
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
-	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
 	"github.com/jjkirkpatrick/spacetraders-client/models"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -43,11 +42,12 @@ func main() {
 	options.Symbol = "BlueCa-99"
 	options.Faction = "COSMIC"
 	options.LogLevel = slog.LevelInfo
-	options.TelemetryConfig = &telemetry.Config{
-		ServiceName:    "spacetraders-metrics",
-		ServiceVersion: "1.0.0",
-		OTLPEndpoint:   "localhost:4317",
-	}
+
+	// Initialize telemetry with the new public options
+	options.TelemetryOptions = client.DefaultTelemetryOptions()
+	options.TelemetryOptions.ServiceName = "spacetraders-quickstart"
+	options.TelemetryOptions.ServiceVersion = "1.0.0"
+	options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
 
 	gameState := &GameState{}
 
