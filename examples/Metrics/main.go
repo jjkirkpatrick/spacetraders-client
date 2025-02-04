@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log/slog"
-	"math/rand/v2"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,7 +23,7 @@ type MetricsApp struct {
 
 func newMetricsApp(ctx context.Context) (*MetricsApp, error) {
 	options := client.DefaultClientOptions()
-	options.Symbol = "METRICS_TEST"
+	options.Symbol = "METRICS_TEST1"
 	options.Faction = "COSMIC"
 
 	// Initialize telemetry with the new public options
@@ -73,11 +72,7 @@ func (app *MetricsApp) run(ctx context.Context) error {
 	for i := 0; i < 40; i++ {
 		app.client.Logger.Info("Starting iteration", "iteration", i)
 
-		// Add random delay to simulate real-world usage
-		delay := time.Duration(0.5+rand.Float64()*2.5) * time.Second
-		app.client.Logger.Info("Iteration delay", "iteration", i, "delay_seconds", delay.Seconds())
-		time.Sleep(delay)
-
+		// No need for artificial delays - the rate limiter in the client will handle pacing
 		agent, err := entities.GetAgent(app.client)
 		if err != nil {
 			app.client.Logger.Error("Failed to get agent", "iteration", i, "error", err)
@@ -93,9 +88,6 @@ func (app *MetricsApp) run(ctx context.Context) error {
 		app.client.Logger.Info("Gauge callback set for agent", "iteration", i, "agent.symbol", agent.Symbol)
 
 		app.client.Logger.Info("Iteration completed", "iteration", i)
-
-		// Brief pause between iterations
-		time.Sleep(100 * time.Millisecond)
 	}
 	app.client.Logger.Info("Finished metrics collection loop")
 

@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -76,29 +77,48 @@ type Client struct {
 type RateLimiter struct {
 	staticLimiter *rate.Limiter
 	burstLimiter  *rate.Limiter
-	staticReset   time.Duration
-	burstReset    time.Duration
+	mu            sync.Mutex
+	// Track API-provided limits
+	limitPerSecond float64
+	limitBurst     int
 }
 
 func NewRateLimiter(staticRate, burstRate float64) *RateLimiter {
-	// Adjusting limiters to handle both static and burst rates with updated capacities and durations
 	return &RateLimiter{
-		staticLimiter: rate.NewLimiter(rate.Limit(staticRate), 2), // 2 requests per second
-		burstLimiter:  rate.NewLimiter(rate.Limit(burstRate), 30), // 30 requests per 60 seconds
-		staticReset:   time.Second,
-		burstReset:    60 * time.Second,
+		staticLimiter:  rate.NewLimiter(rate.Limit(staticRate), 2),
+		burstLimiter:   rate.NewLimiter(rate.Limit(burstRate), 30),
+		limitPerSecond: staticRate,
+		limitBurst:     30,
 	}
 }
 
 func (rl *RateLimiter) Wait(ctx context.Context) error {
-	// Prioritize the static pool over the burst pool
-	if rl.staticLimiter.Allow() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	// Always try the static limiter first
+	if err := rl.staticLimiter.Wait(ctx); err == nil {
 		return nil
 	}
-	if rl.burstLimiter.Allow() {
-		return nil
+
+	// If static limiter is exhausted, use the burst limiter
+	return rl.burstLimiter.Wait(ctx)
+}
+
+// updateLimits updates the rate limiters based on API response
+func (rl *RateLimiter) updateLimits(limitPerSecond float64, limitBurst int) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	if limitPerSecond > 0 && limitPerSecond != rl.limitPerSecond {
+		rl.limitPerSecond = limitPerSecond
+		rl.staticLimiter = rate.NewLimiter(rate.Limit(limitPerSecond), 2)
 	}
-	return rl.staticLimiter.Wait(ctx)
+
+	if limitBurst > 0 && limitBurst != rl.limitBurst {
+		rl.limitBurst = limitBurst
+		rl.burstLimiter = rate.NewLimiter(rate.Limit(0.5), limitBurst)
+	}
 }
 
 // DefaultClientOptions returns the default configuration options for the SpaceTraders API client
@@ -266,51 +286,86 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 	var apiError *models.APIError
 	var err error
 
-	backoff := c.retryDelay
-	for {
-		c.Logger.Debug("Client Log: Sending request",
-			"method", method,
-			"url", c.baseURL+endpoint,
-			"body", request.Body,
-			"params", request.QueryParam)
-
-		err = c.RateLimiter.Wait(c.context)
-		if err != nil {
-			c.Logger.Error("Client Log: Rate limiter error", "error", err)
-			return &models.APIError{Message: err.Error(), Code: 429}
-		}
-
-		resp, err = request.Execute(method, c.baseURL+endpoint)
-		duration := time.Since(startTime)
-
-		statusCode := 500
-		if resp != nil {
-			statusCode = resp.StatusCode()
-		}
-		c.recordMetrics(method, endpoint, duration, statusCode, err)
-
-		if err == nil && !resp.IsError() {
-			return nil // Success
-		}
-
-		if resp.StatusCode() == 429 {
-			c.Logger.Warn("Client Log: Rate limit exceeded, handling rate limit")
-			handleRateLimit(resp, c.Logger)
-			continue
-		}
-
-		if resp.IsError() {
-			apiError = parseAPIError(resp)
-			c.Logger.Error("Client Log: API Request resulted in error",
-				"error", apiError.Error(),
-				"data", apiError.Data)
-			return apiError
-		}
-
-		backoff = applyJitter(backoff)
-		time.Sleep(backoff)
-		backoff *= 2
+	// Wait for rate limit token - this will block until we can make the request
+	if err := c.RateLimiter.Wait(c.context); err != nil {
+		c.Logger.Error("Client Log: Rate limiter error", "error", err)
+		return &models.APIError{Message: err.Error(), Code: 429}
 	}
+
+	// Make the request
+	resp, err = request.Execute(method, c.baseURL+endpoint)
+	duration := time.Since(startTime)
+
+	statusCode := 500
+	if resp != nil {
+		statusCode = resp.StatusCode()
+	}
+	c.recordMetrics(method, endpoint, duration, statusCode, err)
+
+	// If successful, return immediately
+	if err == nil && !resp.IsError() {
+		return nil
+	}
+
+	// Handle rate limit response
+	if resp != nil && resp.StatusCode() == 429 {
+		// Parse the rate limit error details
+		apiError = parseAPIError(resp)
+		if apiError != nil && apiError.Data != nil {
+			// Update our rate limiters based on the API response
+			if limitPerSecond, ok := apiError.Data["limitPerSecond"].(float64); ok {
+				if limitBurst, ok := apiError.Data["limitBurst"].(float64); ok {
+					c.Logger.Debug("Updating rate limits from API response",
+						"limitPerSecond", limitPerSecond,
+						"limitBurst", int(limitBurst))
+					c.RateLimiter.updateLimits(limitPerSecond, int(limitBurst))
+				}
+			}
+
+			// Get the retry after duration
+			if retryAfter, ok := apiError.Data["retryAfter"].(float64); ok {
+				waitDuration := time.Duration(retryAfter * float64(time.Second))
+				c.Logger.Debug("Rate limit exceeded, waiting as specified by API",
+					"wait_duration", waitDuration)
+				time.Sleep(waitDuration)
+
+				// Retry the request once after waiting
+				resp, err = request.Execute(method, c.baseURL+endpoint)
+				if err == nil && !resp.IsError() {
+					return nil
+				}
+			} else {
+				// Fallback to using reset time if retryAfter is not available
+				if resetTimeStr, ok := apiError.Data["reset"].(string); ok {
+					if resetTime, parseErr := time.Parse(time.RFC3339, resetTimeStr); parseErr == nil {
+						waitDuration := time.Until(resetTime)
+						// Add a small buffer to ensure we're past the reset time
+						waitDuration += 100 * time.Millisecond
+						c.Logger.Debug("Rate limit exceeded, waiting until reset time",
+							"wait_duration", waitDuration)
+						time.Sleep(waitDuration)
+
+						// Retry the request once after waiting
+						resp, err = request.Execute(method, c.baseURL+endpoint)
+						if err == nil && !resp.IsError() {
+							return nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// If we still have an error, return it
+	if resp.IsError() {
+		apiError = parseAPIError(resp)
+		c.Logger.Error("Client Log: API Request resulted in error",
+			"error", apiError.Error(),
+			"data", apiError.Data)
+		return apiError
+	}
+
+	return nil
 }
 
 func (c *Client) recordMetrics(method, endpoint string, duration time.Duration, statusCode int, err error) {
@@ -350,10 +405,15 @@ func handleRateLimit(resp *resty.Response, logger *slog.Logger) {
 	if resetTime != "" {
 		if resetTimestamp, parseErr := strconv.ParseInt(resetTime, 10, 64); parseErr == nil {
 			waitDuration := time.Until(time.Unix(resetTimestamp, 0))
+			// Add a small buffer to ensure we're past the reset time
+			waitDuration += 100 * time.Millisecond
 			logger.Debug("Rate limit exceeded, waiting until reset",
 				"wait_duration", waitDuration)
 			time.Sleep(waitDuration)
 		}
+	} else {
+		// If no reset time is provided, use a default backoff
+		time.Sleep(2 * time.Second)
 	}
 }
 
