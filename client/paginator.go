@@ -101,8 +101,6 @@ func (p *Paginator[T]) FetchAllPages() ([]T, error) {
 					Meta:          p.Meta,
 					fetchPageFunc: p.fetchPageFunc,
 				}
-				fmt.Println("Fetching page", page)
-
 				// Try up to 3 times
 				var data *Paginator[T]
 				var err error
