@@ -48,6 +48,7 @@ type ClientOptions struct {
 	Email             string
 	RequestsPerSecond float32
 	LogLevel          slog.Level
+	Handler           slog.Handler // optional custom slog handler; if provided, it will override default logging
 	RetryDelay        time.Duration
 	// Telemetry configuration (optional)
 	TelemetryOptions *TelemetryOptions
@@ -203,13 +204,19 @@ func NewClient(options ClientOptions) (*Client, error) {
 		return nil, fmt.Errorf("symbol is required")
 	}
 
-	// Configure basic slog handler
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: options.LogLevel,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			return a
-		},
-	})
+	// Configure slog logger using custom handler if provided
+	var logger *slog.Logger
+	if options.Handler != nil {
+		logger = slog.New(options.Handler)
+	} else {
+		defaultHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: options.LogLevel,
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				return a
+			},
+		})
+		logger = slog.New(defaultHandler)
+	}
 
 	// Create initial client with basic logging
 	client := &Client{
@@ -219,7 +226,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		retryDelay:  options.RetryDelay,
 		AgentSymbol: options.Symbol,
 		CacheClient: cache.NewCache(),
-		Logger:      slog.New(handler),
+		Logger:      logger,
 		RateLimiter: NewRateLimiter(2, 30),
 	}
 
