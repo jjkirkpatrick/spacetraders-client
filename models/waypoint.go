@@ -23,7 +23,6 @@ const (
 	GravityWell           WaypointType = "GRAVITY_WELL"
 	ArtificialGravityWell WaypointType = "ARTIFICIAL_GRAVITY_WELL"
 	FuelStation           WaypointType = "FUEL_STATION"
-	
 )
 
 type WaypointTrait string
@@ -100,7 +99,7 @@ const (
 	TraitStripped              WaypointTrait = "STRIPPED"
 )
 
-type WaypoinTraits struct {
+type WaypointTraits struct {
 	Symbol      WaypointTrait `json:"symbol"`
 	Name        string        `json:"name"`
 	Description string        `json:"description"`

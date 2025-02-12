@@ -11,12 +11,12 @@ type System struct {
 }
 
 type Waypoint struct {
-	Symbol   string          `json:"symbol"`
-	Type     string          `json:"type"`
-	X        int             `json:"x"`
-	Y        int             `json:"y"`
-	Orbitals []Orbital       `json:"orbitals"`
-	Traits   []WaypoinTraits `json:"traits"`
+	Symbol   string           `json:"symbol"`
+	Type     string           `json:"type"`
+	X        int              `json:"x"`
+	Y        int              `json:"y"`
+	Orbitals []Orbital        `json:"orbitals"`
+	Traits   []WaypointTraits `json:"traits"`
 }
 
 type Orbital struct {
