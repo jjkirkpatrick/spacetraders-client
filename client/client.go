@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,6 +53,8 @@ type ClientOptions struct {
 	RetryDelay        time.Duration
 	// Telemetry configuration (optional)
 	TelemetryOptions *TelemetryOptions
+	// Request queue size (default: 100)
+	RequestQueueSize int
 }
 
 // Client represents the SpaceTraders API client
@@ -65,17 +68,39 @@ type Client struct {
 	CacheClient *cache.Cache
 	Logger      *slog.Logger
 	RateLimiter *RateLimiter
+	// Request queue
+	requestQueue *RequestQueue
+
+	// Game reset notification channel
+	// This channel will receive a message when a token version mismatch is detected
+	// indicating that the game has been reset
+	GameResetCh chan struct{}
 
 	// Telemetry (metrics only)
 	telemetryProviders *telemetry.Providers
 	meter              metric.Meter
-	requestCounter     metric.Int64Counter
-	requestDuration    metric.Float64Histogram
-	errorCounter       metric.Int64Counter
-	rateLimitGauge     metric.Float64ObservableGauge
-	remainingRequests  metric.Int64ObservableGauge
-	resetTimeGauge     metric.Float64ObservableGauge
+
+	// API request metrics
+	requestCounter  metric.Int64Counter
+	requestDuration metric.Float64Histogram
+	errorCounter    metric.Int64Counter
+	retryCounter    metric.Int64Counter
+
+	// Rate limit metrics
+	rateLimitGauge    metric.Float64ObservableGauge
+	remainingRequests metric.Int64ObservableGauge
+	resetTimeGauge    metric.Float64ObservableGauge
+
+	// Queue metrics
+	queueLengthGauge    metric.Int64ObservableGauge
+	queueWaitTime       metric.Float64Histogram
+	queueProcessTime    metric.Float64Histogram
+	avgQueueTimeGauge   metric.Float64ObservableGauge
+	avgProcessTimeGauge metric.Float64ObservableGauge
 }
+
+// Ensure Client implements RequestExecutor interface
+var _ RequestExecutor = (*Client)(nil)
 
 type RateLimiter struct {
 	staticLimiter *rate.Limiter
@@ -111,7 +136,7 @@ func (rl *RateLimiter) Wait(ctx context.Context) error {
 		if resetDuration > 0 {
 			rl.mu.Unlock()
 			// Add a smaller buffer to ensure we're past the reset
-			waitDuration := resetDuration + 15*time.Millisecond
+			waitDuration := resetDuration + 10*time.Millisecond
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -123,6 +148,27 @@ func (rl *RateLimiter) Wait(ctx context.Context) error {
 		}
 	}
 
+	// Be more conservative only when we're very close to the limit
+	// If we're below 10% of our burst limit, add additional delay
+	if rl.remaining < int64(rl.limitBurst/10) {
+		// Add extra delay proportional to how close we are to the limit
+		safetyFactor := float64(rl.limitBurst/10) / float64(rl.remaining+1)
+		extraDelay := time.Duration(safetyFactor * float64(time.Second/4))
+
+		// Cap the extra delay at 500ms
+		if extraDelay > 500*time.Millisecond {
+			extraDelay = 500 * time.Millisecond
+		}
+
+		rl.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(extraDelay):
+			rl.mu.Lock()
+		}
+	}
+
 	// Use the static limiter to maintain steady rate
 	err := rl.staticLimiter.Wait(ctx)
 	if err != nil {
@@ -130,7 +176,7 @@ func (rl *RateLimiter) Wait(ctx context.Context) error {
 		return err
 	}
 
-	// Only decrement remaining if we're getting close to the limit
+	// Only decrement remaining when we're below 50% of the burst limit
 	// This allows full utilization of the 2/s rate while still protecting against bursts
 	if rl.remaining < int64(rl.limitBurst/2) {
 		rl.remaining--
@@ -183,6 +229,8 @@ func DefaultClientOptions() ClientOptions {
 		LogLevel:          slog.LevelInfo,
 		// Telemetry is disabled by default
 		TelemetryOptions: nil,
+		// Default request queue size
+		RequestQueueSize: 100,
 	}
 }
 
@@ -228,6 +276,9 @@ func NewClient(options ClientOptions) (*Client, error) {
 		CacheClient: cache.NewCache(),
 		Logger:      logger,
 		RateLimiter: NewRateLimiter(2, 30),
+		// Initialize the game reset notification channel with a buffer
+		// to ensure sending to this channel never blocks
+		GameResetCh: make(chan struct{}, 1),
 	}
 
 	// Initialize telemetry if configured
@@ -265,6 +316,8 @@ func NewClient(options ClientOptions) (*Client, error) {
 		client.meter = otel.GetMeterProvider().Meter("spacetraders-client")
 
 		var merr error
+
+		// API request metrics
 		client.requestCounter, merr = client.meter.Int64Counter("api_requests_total",
 			metric.WithDescription("Total number of API requests made"),
 			metric.WithUnit("{requests}"),
@@ -290,6 +343,15 @@ func NewClient(options ClientOptions) (*Client, error) {
 			return nil, fmt.Errorf("failed to create error counter: %w", merr)
 		}
 
+		client.retryCounter, merr = client.meter.Int64Counter("api_retries_total",
+			metric.WithDescription("Total number of API request retries"),
+			metric.WithUnit("{retries}"),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create retry counter: %w", merr)
+		}
+
+		// Rate limit metrics
 		client.rateLimitGauge, merr = client.meter.Float64ObservableGauge("api_rate_limit",
 			metric.WithDescription("Current API rate limit settings"),
 			metric.WithUnit("{requests_per_second}"),
@@ -314,7 +376,52 @@ func NewClient(options ClientOptions) (*Client, error) {
 			return nil, fmt.Errorf("failed to create reset time gauge: %w", merr)
 		}
 
+		// Queue metrics
+		client.queueLengthGauge, merr = client.meter.Int64ObservableGauge("api_queue_length",
+			metric.WithDescription("Number of requests in the queue"),
+			metric.WithUnit("{requests}"),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create queue length gauge: %w", merr)
+		}
+
+		client.queueWaitTime, merr = client.meter.Float64Histogram("api_queue_wait_time_seconds",
+			metric.WithDescription("Time requests spend waiting in the queue"),
+			metric.WithUnit("s"),
+			metric.WithExplicitBucketBoundaries(0.01, 0.05, 0.1, 0.5, 1, 2.5, 5, 10, 30, 60),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create queue wait time histogram: %w", merr)
+		}
+
+		client.queueProcessTime, merr = client.meter.Float64Histogram("api_queue_process_time_seconds",
+			metric.WithDescription("Time taken to process requests from the queue"),
+			metric.WithUnit("s"),
+			metric.WithExplicitBucketBoundaries(0.01, 0.05, 0.1, 0.5, 1, 2.5, 5, 10),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create queue process time histogram: %w", merr)
+		}
+
+		client.avgQueueTimeGauge, merr = client.meter.Float64ObservableGauge("api_avg_queue_time_seconds",
+			metric.WithDescription("Average time requests spend in the queue"),
+			metric.WithUnit("s"),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create average queue time gauge: %w", merr)
+		}
+
+		client.avgProcessTimeGauge, merr = client.meter.Float64ObservableGauge("api_avg_process_time_seconds",
+			metric.WithDescription("Average time to process requests from the queue"),
+			metric.WithUnit("s"),
+		)
+		if merr != nil {
+			return nil, fmt.Errorf("failed to create average process time gauge: %w", merr)
+		}
+
+		// Register callback for observable metrics
 		_, err := client.meter.RegisterCallback(func(_ context.Context, o metric.Observer) error {
+			// Rate limit metrics
 			o.ObserveFloat64(client.rateLimitGauge, client.RateLimiter.limitPerSecond,
 				metric.WithAttributes(
 					attribute.String("type", "static"),
@@ -332,8 +439,30 @@ func NewClient(options ClientOptions) (*Client, error) {
 						attribute.String("agent", client.AgentSymbol),
 					))
 			}
+
+			// Queue metrics
+			if client.requestQueue != nil {
+				// Queue length
+				o.ObserveInt64(client.queueLengthGauge, int64(client.requestQueue.QueueLength()),
+					metric.WithAttributes(
+						attribute.String("agent", client.AgentSymbol),
+					))
+
+				// Average queue and process times
+				avgQueueTime, avgProcessTime, _ := client.requestQueue.GetMetrics()
+				o.ObserveFloat64(client.avgQueueTimeGauge, avgQueueTime.Seconds(),
+					metric.WithAttributes(
+						attribute.String("agent", client.AgentSymbol),
+					))
+				o.ObserveFloat64(client.avgProcessTimeGauge, avgProcessTime.Seconds(),
+					metric.WithAttributes(
+						attribute.String("agent", client.AgentSymbol),
+					))
+			}
+
 			return nil
-		}, client.rateLimitGauge, client.remainingRequests, client.resetTimeGauge)
+		}, client.rateLimitGauge, client.remainingRequests, client.resetTimeGauge,
+			client.queueLengthGauge, client.avgQueueTimeGauge, client.avgProcessTimeGauge)
 		if err != nil {
 			return nil, fmt.Errorf("failed to register metric callbacks: %w", err)
 		}
@@ -343,38 +472,48 @@ func NewClient(options ClientOptions) (*Client, error) {
 		return nil, apiError
 	}
 
+	// Initialize the request queue
+	queueSize := options.RequestQueueSize
+	if queueSize <= 0 {
+		queueSize = 100 // Default size
+	}
+	client.requestQueue = NewRequestQueue(client.context, client, queueSize)
+
 	client.Logger.Info("New SpaceTraders client initialized",
 		"baseURL", client.baseURL,
-		"rateLimit", options.RequestsPerSecond)
+		"rateLimit", options.RequestsPerSecond,
+		"queueSize", queueSize)
 	return client, nil
 }
 
 // Get sends a GET request to the specified endpoint with optional query parameters
 func (c *Client) Get(endpoint string, queryParams map[string]string, result interface{}) *models.APIError {
-	return c.sendRequest("GET", endpoint, nil, queryParams, result)
+	return c.requestQueue.Enqueue("GET", endpoint, nil, queryParams, result)
 }
 
 // Post sends a POST request to the specified endpoint with optional query parameters
 func (c *Client) Post(endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
-	return c.sendRequest("POST", endpoint, body, queryParams, result)
+	return c.requestQueue.Enqueue("POST", endpoint, body, queryParams, result)
 }
 
 // Put sends a PUT request to the specified endpoint with optional query parameters
 func (c *Client) Put(endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
-	return c.sendRequest("PUT", endpoint, body, queryParams, result)
+	return c.requestQueue.Enqueue("PUT", endpoint, body, queryParams, result)
 }
 
 // Delete sends a DELETE request to the specified endpoint with optional query parameters
 func (c *Client) Delete(endpoint string, queryParams map[string]string, result interface{}) *models.APIError {
-	return c.sendRequest("DELETE", endpoint, nil, queryParams, result)
+	return c.requestQueue.Enqueue("DELETE", endpoint, nil, queryParams, result)
 }
 
 // Patch sends a PATCH request to the specified endpoint with optional query parameters
 func (c *Client) Patch(endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
-	return c.sendRequest("PATCH", endpoint, body, queryParams, result)
+	return c.requestQueue.Enqueue("PATCH", endpoint, body, queryParams, result)
 }
 
-func (c *Client) sendRequest(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+// executeRequest executes an HTTP request with the given parameters
+// This is used by the request queue to process requests
+func (c *Client) executeRequest(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 	startTime := time.Now()
 
 	request := c.httpClient.R().
@@ -473,31 +612,46 @@ func (c *Client) sendRequest(method, endpoint string, body interface{}, queryPar
 						rateLimit.Reset,
 					)
 
-					// Wait for the specified retry time
-					if retryAfter, ok := apiError.Data["retryAfter"].(float64); ok {
-						waitDuration := time.Duration(retryAfter * float64(time.Millisecond))
-						c.Logger.Debug("Rate limit exceeded, waiting as specified by API",
-							"wait_duration", waitDuration)
-						time.Sleep(waitDuration)
-
-						// Retry the request once after waiting
-						resp, err = request.Execute(method, c.baseURL+endpoint)
-						if err == nil && !resp.IsError() {
-							return nil
-						}
-					}
+					// Don't retry here - let the request queue handle retries
+					// Just log the rate limit error and return it
+					c.Logger.Debug("Rate limit exceeded, returning error to request queue for retry handling")
+					return apiError
 				}
 			}
 		}
 	}
 
 	// If we still have an error, return it
-	if resp.IsError() {
+	if resp != nil && resp.IsError() {
 		apiError = parseAPIError(resp)
 		c.Logger.Error("Client Log: API Request resulted in error",
 			"error", apiError.Error(),
 			"data", apiError.Data)
+
+		// Check for token version mismatch error (game reset)
+		if apiError.Code == 401 && strings.Contains(apiError.Message, TokenVersionMismatchPattern) {
+			c.Logger.Error("GAME RESET DETECTED: Token version mismatch",
+				"message", apiError.Message)
+
+			// Send notification through the game reset channel (non-blocking)
+			select {
+			case c.GameResetCh <- struct{}{}:
+				// Successfully sent notification
+			default:
+				// Channel buffer is full, which means a notification has already been sent
+				// This is fine, we just want to ensure at least one notification is sent
+			}
+		}
+
 		return apiError
+	}
+
+	// Handle other errors
+	if err != nil {
+		return &models.APIError{
+			Code:    statusCode,
+			Message: err.Error(),
+		}
 	}
 
 	return nil
@@ -572,17 +726,60 @@ func parseAPIError(resp *resty.Response) *models.APIError {
 	}
 }
 
-// Adjust isRateLimitError to include more transient errors if needed
-func isRateLimitError(statusCode int) bool {
-	return statusCode == 429 || statusCode == 502
-}
-
+// GetToken returns the current token used by the client
 func (c *Client) GetToken() string {
 	return c.token
 }
 
+// SetToken sets the token for the client
+func (c *Client) SetToken(token string) {
+	c.token = token
+}
+
+// IsGameReset checks if a game reset has been detected without blocking
+// Returns true if a reset has been detected, false otherwise
+func (c *Client) IsGameReset() bool {
+	select {
+	case <-c.GameResetCh:
+		// If we received a value, put it back for other listeners
+		// This ensures multiple calls to IsGameReset will all return true
+		// after a reset has been detected
+		select {
+		case c.GameResetCh <- struct{}{}:
+		default:
+			// If the channel is full, that's fine
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+// WaitForGameReset blocks until a game reset is detected or the context is cancelled
+// Returns true if a reset was detected, false if the context was cancelled
+func (c *Client) WaitForGameReset(ctx context.Context) bool {
+	select {
+	case <-c.GameResetCh:
+		// If we received a value, put it back for other listeners
+		select {
+		case c.GameResetCh <- struct{}{}:
+		default:
+			// If the channel is full, that's fine
+		}
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // Close gracefully shuts down the client and its telemetry providers
 func (c *Client) Close(ctx context.Context) error {
+	// Shutdown the request queue first
+	if c.requestQueue != nil {
+		c.requestQueue.Shutdown()
+	}
+
+	// Then shutdown telemetry
 	if c.telemetryProviders != nil {
 		return c.telemetryProviders.Shutdown(ctx)
 	}
@@ -596,3 +793,7 @@ type RateLimitResponse struct {
 	Remaining      int64
 	Reset          time.Time
 }
+
+// TokenVersionMismatchPattern is used to detect when a token version mismatch error occurs
+// indicating that the game has been reset
+const TokenVersionMismatchPattern = "Token version does not match the server"
