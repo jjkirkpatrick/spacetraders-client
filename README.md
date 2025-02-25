@@ -53,6 +53,9 @@ options.TelemetryOptions.AdditionalAttributes = map[string]string{
     "team": "platform",
 }
 
+// Configure request queue size (default is 100)
+options.RequestQueueSize = 200  // Increase queue size for high-concurrency applications
+
 client, err := client.NewClient(options)
 ```
 
@@ -246,3 +249,109 @@ volumes:
   influxdb_data:
   grafana_data:
 ```
+
+## Rate Limiting and Request Queue
+
+The SpaceTraders API enforces rate limits (typically 2 requests per second with bursting capability). To help manage these limits when making concurrent API calls, this client implements a centralized request queue.
+
+### How the Request Queue Works
+
+1. **Automatic Rate Limiting**: All API requests are automatically queued and processed at a controlled rate to comply with the API's rate limits.
+
+2. **Concurrent-Safe**: Multiple goroutines can safely make API calls without worrying about rate limit errors.
+
+3. **Configurable Queue Size**: You can adjust the queue size based on your application's needs:
+
+```go
+options := client.DefaultClientOptions()
+options.RequestQueueSize = 200  // Default is 100
+```
+
+4. **Graceful Shutdown**: The queue is properly cleaned up when the client is closed:
+
+```go
+defer client.Close(context.Background())
+```
+
+### Example: Making Concurrent API Calls
+
+```go
+// Create multiple concurrent requests
+var wg sync.WaitGroup
+
+for i := 0; i < 10; i++ {
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        
+        // This call will be automatically queued and rate-limited
+        agent, err := entities.GetAgent(client)
+        if err != nil {
+            fmt.Printf("Error: %v\n", err)
+            return
+        }
+        
+        fmt.Printf("Agent %s has %d credits\n", agent.Symbol, agent.Credits)
+    }()
+}
+
+// Wait for all requests to complete
+wg.Wait()
+```
+
+Even though the requests are initiated concurrently, they will be processed through the queue at a controlled rate to avoid rate limit errors.
+
+### Telemetry
+
+If you've enabled telemetry, the client provides a `api_queue_length` metric to monitor the number of requests waiting in the queue.
+
+## Game Reset Handling
+
+The SpaceTraders game undergoes periodic resets (typically weekly or bi-weekly during alpha), which invalidate existing tokens. The client provides a mechanism to detect and handle these resets gracefully.
+
+### How Game Reset Detection Works
+
+1. **Automatic Detection**: The client automatically detects token version mismatch errors, which indicate that the game has been reset.
+
+2. **Non-blocking Notification**: When a game reset is detected, a notification is sent through the `GameResetCh` channel without blocking the client's operation.
+
+3. **Multiple Detection Methods**: The client provides both blocking and non-blocking methods to check for game resets:
+
+```go
+// Non-blocking check
+if client.IsGameReset() {
+    // Handle game reset (e.g., re-register agent, exit application)
+}
+
+// Blocking wait with context
+if client.WaitForGameReset(ctx) {
+    // Handle game reset
+}
+```
+
+### Example: Handling Game Resets
+
+```go
+// Start a goroutine to monitor for game resets
+go func() {
+    for {
+        // Wait for a game reset or context cancellation
+        if client.WaitForGameReset(ctx) {
+            fmt.Println("Game reset detected! Re-registering agent...")
+            // Re-register agent or exit application
+            break
+        }
+    }
+}()
+
+// In your main request loop, you can also check non-blocking
+for {
+    if client.IsGameReset() {
+        break // Stop making requests
+    }
+    
+    // Make API requests...
+}
+```
+
+For a complete example, see the [Game Reset Handling Example](examples/game_reset_handling/README.md).

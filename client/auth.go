@@ -15,6 +15,7 @@ type RegisterRequest struct {
 	Faction string `json:"faction"`
 	Symbol  string `json:"symbol"`
 	Email   string `json:"email,omitempty"`
+	Token   string `json:"token,omitempty"`
 }
 
 // RegisterResponse represents the response payload for registering a new agent
@@ -66,6 +67,13 @@ func (c *Client) getOrRegisterToken(faction, symbol, email string) error {
 		return nil
 	}
 
+	var registerResp RegisterResponse
+
+	accountToken, err := c.getTokenFromFile("account")
+	if err != nil {
+		return err
+	}
+
 	// Token not found, register a new agent
 	registerReq := RegisterRequest{
 		Faction: faction,
@@ -73,9 +81,10 @@ func (c *Client) getOrRegisterToken(faction, symbol, email string) error {
 		Email:   email,
 	}
 
-	var registerResp RegisterResponse
+	c.token = accountToken
 
-	apiErr := c.Post("/register", registerReq, nil, &registerResp)
+	// Use executeRequest directly since requestQueue won't be initialized yet
+	apiErr := c.executeRequest("POST", "/register", registerReq, nil, &registerResp)
 	if apiErr != nil {
 		return apiErr
 	}
