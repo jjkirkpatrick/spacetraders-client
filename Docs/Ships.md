@@ -1,152 +1,418 @@
 # Ship Operations Guide
 
-This guide provides an overview of how to interact with ship-related functionalities using the provided methods in `ships.go`. Each function is designed to perform specific operations related to ships in the SpaceTraders API.
+This guide covers ship-related operations using the `entities` package.
 
 ## Getting Started
 
-Before you can use any of the ship functions, ensure you have a client instance created and authenticated. Refer to the client setup guide for instructions on initializing and authenticating your client.
+```go
+import (
+    "github.com/jjkirkpatrick/spacetraders-client/client"
+    "github.com/jjkirkpatrick/spacetraders-client/entities"
+    "github.com/jjkirkpatrick/spacetraders-client/models"
+)
 
-## Function Descriptions
+// Create client
+c, err := client.NewClient(options)
+defer c.Close(ctx)
+
+// Get your ships
+ships, err := entities.ListShips(c)
+ship := ships[0]  // Work with first ship
+```
+
+## Fleet Management
 
 ### ListShips
 
-- **Purpose**: Fetches a list of all ships the agent owns.
-- **Usage**: `ListShips(client *client.Client) ([]*Ship, error)`
+Fetches all ships owned by the agent.
+
+```go
+func ListShips(c *client.Client) ([]*Ship, error)
+```
 
 ### GetShip
 
-- **Purpose**: Retrieves detailed information about a specific ship by its symbol.
-- **Usage**: `GetShip(client *client.Client, symbol string) (*Ship, error)`
+Retrieves a specific ship by symbol.
+
+```go
+func GetShip(c *client.Client, symbol string) (*Ship, error)
+```
 
 ### PurchaseShip
 
-- **Purpose**: Allows the purchase of a new ship.
-- **Usage**: `PurchaseShip(client *client.Client, shipType string, waypoint string) (*models.Agent, *Ship, *models.Transaction, error)`
+Purchases a new ship from a shipyard.
+
+```go
+func PurchaseShip(c *client.Client, shipType string, waypoint string) (*models.Agent, *Ship, *models.Transaction, error)
+```
+
+**Example:**
+```go
+agent, ship, transaction, err := entities.PurchaseShip(c, "SHIP_MINING_DRONE", "X1-ABC-SHIPYARD")
+if err != nil {
+    log.Fatalf("Failed to purchase ship: %v", err)
+}
+fmt.Printf("Purchased %s for %d credits\n", ship.Symbol, transaction.TotalPrice)
+```
+
+## Navigation
 
 ### Orbit
 
-- **Purpose**: Commands a ship to enter orbit around the current waypoint.
-- **Usage**: `func (s *Ship) Orbit() (*models.ShipNav, error)`
+Commands a ship to enter orbit around the current waypoint.
+
+```go
+func (s *Ship) Orbit() (*models.ShipNav, error)
+```
 
 ### Dock
 
-- **Purpose**: Commands a ship to dock at the current waypoint.
-- **Usage**: `func (s *Ship) Dock() (*models.ShipNav, error)`
+Commands a ship to dock at the current waypoint.
 
-### FetchCargo
-
-- **Purpose**: Retrieves the current cargo load of a ship.
-- **Usage**: `func (s *Ship) FetchCargo() (*models.Cargo, error)`
-
-### Refine
-
-- **Purpose**: Processes raw materials into a refined state.
-- **Usage**: `func (s *Ship) Refine(produce string) (*models.Produced, *models.Consumed, error)`
-
-### Chart
-
-- **Purpose**: Generates a navigation chart for a ship.
-- **Usage**: `func (s *Ship) Chart() (*models.Chart, *models.Waypoint, error)`
-
-### FetchCooldown
-
-- **Purpose**: Checks the cooldown status of a ship's operations.
-- **Usage**: `func (s *Ship) FetchCooldown() error`
-
-### Survey
-
-- **Purpose**: Conducts a survey of the surrounding area for resources.
-- **Usage**: `func (s *Ship) Survey() ([]models.Survey, error)`
-
-### Extract
-
-- **Purpose**: Extracts resources from the current location.
-- **Usage**: `func (s *Ship) Extract() (*models.Extraction, error)`
-
-### Siphon
-
-- **Purpose**: Siphons resources from another entity.
-- **Usage**: `func (s *Ship) Siphon() (*models.Extraction, error)`
-
-### ExtractWithSurvey
-
-- **Purpose**: Extracts resources based on a previously conducted survey.
-- **Usage**: `func (s *Ship) ExtractWithSurvey(survey models.Survey) (*models.Extraction, error)`
-
-### Jettison
-
-- **Purpose**: Jettisons cargo into space.
-- **Usage**: `func (s *Ship) Jettison(goodSymbol models.GoodSymbol, units int) (*models.Cargo, error)`
-
-### Jump
-
-- **Purpose**: Commands a ship to jump to another system.
-- **Usage**: `func (s *Ship) Jump(systemSymbol string) (*models.ShipNav, *models.ShipCooldown, *models.Transaction, *models.Agent, error)`
+```go
+func (s *Ship) Dock() (*models.ShipNav, error)
+```
 
 ### Navigate
 
-- **Purpose**: Navigates a ship to a specified waypoint.
-- **Usage**: `func (s *Ship) Navigate(waypointSymbol string) (*models.FuelDetails, *models.ShipNav, []models.Event, error)`
+Navigates a ship to a specified waypoint within the same system.
 
-### SetFlightMode
+```go
+func (s *Ship) Navigate(waypointSymbol string) (*models.FuelDetails, *models.ShipNav, []models.Event, error)
+```
 
-- **Purpose**: Sets the flight mode of a ship.
-- **Usage**: `func (s *Ship) SetFlightMode(flightmode models.FlightMode) error`
-
-### FetchNavigationStatus
-
-- **Purpose**: Retrieves the current navigation status of a ship.
-- **Usage**: `func (s *Ship) FetchNavigationStatus() (*models.ShipNav, error)`
+**Example:**
+```go
+fuel, nav, events, err := ship.Navigate("X1-ABC-ASTEROID")
+if err != nil {
+    log.Fatalf("Navigation failed: %v", err)
+}
+fmt.Printf("Arriving at %s, ETA: %s\n", nav.WaypointSymbol, nav.Route.Arrival)
+```
 
 ### Warp
 
-- **Purpose**: Commands a ship to warp to a new location.
-- **Usage**: `func (s *Ship) Warp(waypointSymbol string) (*models.FuelDetails, *models.ShipNav, error)`
+Commands a ship to warp to a waypoint in another system.
+
+```go
+func (s *Ship) Warp(waypointSymbol string) (*models.FuelDetails, *models.ShipNav, error)
+```
+
+### Jump
+
+Commands a ship to jump to another system using a jump gate.
+
+```go
+func (s *Ship) Jump(systemSymbol string) (*models.ShipNav, *models.ShipCooldown, *models.Transaction, *models.Agent, error)
+```
+
+### SetFlightMode
+
+Sets the flight mode of a ship (CRUISE, BURN, DRIFT, STEALTH).
+
+```go
+func (s *Ship) SetFlightMode(flightmode models.FlightMode) error
+```
+
+**Example:**
+```go
+err := ship.SetFlightMode(models.FlightModeBurn)
+```
+
+### FetchNavigationStatus
+
+Retrieves the current navigation status of a ship.
+
+```go
+func (s *Ship) FetchNavigationStatus() (*models.ShipNav, error)
+```
+
+### GetRouteToDestination
+
+Calculates an optimal route to a destination waypoint using pathfinding.
+
+```go
+func (s *Ship) GetRouteToDestination(destination string) (*models.PathfindingRoute, error)
+```
+
+**Example:**
+```go
+route, err := ship.GetRouteToDestination("X1-ABC-DESTINATION")
+if err != nil {
+    log.Fatalf("Pathfinding failed: %v", err)
+}
+for _, step := range route.Steps {
+    fmt.Printf("Step: %s via %s\n", step.Waypoint, step.FlightMode)
+}
+```
+
+### CalculateFuelRequired
+
+Calculates fuel required for a given distance and flight mode.
+
+```go
+func (s *Ship) CalculateFuelRequired(distance float64, flightMode models.FlightMode) int
+```
+
+### CalculateTravelTime
+
+Calculates travel time in seconds for a given distance and flight mode.
+
+```go
+func (s *Ship) CalculateTravelTime(distance float64, flightMode models.FlightMode) int
+```
+
+## Mining & Extraction
+
+### Extract
+
+Extracts resources from the current location (asteroid field).
+
+```go
+func (s *Ship) Extract() (*models.Extraction, error)
+```
+
+**Example:**
+```go
+extraction, err := ship.Extract()
+if err != nil {
+    log.Fatalf("Extraction failed: %v", err)
+}
+fmt.Printf("Extracted %d units of %s\n", extraction.Yield.Units, extraction.Yield.Symbol)
+```
+
+### ExtractWithSurvey
+
+Extracts resources using a previously conducted survey for better yields.
+
+```go
+func (s *Ship) ExtractWithSurvey(survey models.Survey) (*models.Extraction, error)
+```
+
+### Survey
+
+Conducts a survey of the surrounding area to find resource deposits.
+
+```go
+func (s *Ship) Survey() ([]models.Survey, error)
+```
+
+### Siphon
+
+Siphons resources from gas giants.
+
+```go
+func (s *Ship) Siphon() (*models.Extraction, error)
+```
+
+### Refine
+
+Processes raw materials into refined goods.
+
+```go
+func (s *Ship) Refine(produce string) (*models.Produced, *models.Consumed, error)
+```
+
+## Cargo Management
+
+### FetchCargo
+
+Retrieves the current cargo contents of a ship.
+
+```go
+func (s *Ship) FetchCargo() (*models.Cargo, error)
+```
+
+**Example:**
+```go
+cargo, err := ship.FetchCargo()
+if err != nil {
+    log.Fatalf("Failed to fetch cargo: %v", err)
+}
+fmt.Printf("Cargo: %d/%d units\n", cargo.Units, cargo.Capacity)
+for _, item := range cargo.Inventory {
+    fmt.Printf("  %s: %d units\n", item.Symbol, item.Units)
+}
+```
+
+### Jettison
+
+Jettisons cargo into space.
+
+```go
+func (s *Ship) Jettison(goodSymbol models.GoodSymbol, units int) (*models.Cargo, error)
+```
+
+### TransferCargo
+
+Transfers cargo to another ship.
+
+```go
+func (s *Ship) TransferCargo(goodSymbol models.GoodSymbol, units int, shipSymbol string) (*models.Cargo, error)
+```
+
+## Trading
 
 ### SellCargo
 
-- **Purpose**: Sells cargo from a ship's inventory.
-- **Usage**: `func (s *Ship) SellCargo(goodSymbol models.GoodSymbol, units int) (*models.Agent, *models.Cargo, *models.Transaction, error)`
+Sells cargo at a marketplace.
+
+```go
+func (s *Ship) SellCargo(goodSymbol models.GoodSymbol, units int) (*models.Agent, *models.Cargo, *models.Transaction, error)
+```
+
+**Example:**
+```go
+agent, cargo, transaction, err := ship.SellCargo(models.GoodSymbol("IRON_ORE"), 10)
+if err != nil {
+    log.Fatalf("Sale failed: %v", err)
+}
+fmt.Printf("Sold for %d credits\n", transaction.TotalPrice)
+```
+
+### PurchaseCargo
+
+Purchases cargo from a marketplace.
+
+```go
+func (s *Ship) PurchaseCargo(goodSymbol models.GoodSymbol, units int) (*models.Agent, *models.Cargo, *models.Transaction, error)
+```
+
+## Fuel
+
+### Refuel
+
+Refuels the ship at a marketplace or from cargo.
+
+```go
+func (s *Ship) Refuel(amount int, fromCargo bool) (*models.Agent, *models.FuelDetails, *models.Transaction, error)
+```
+
+**Example:**
+```go
+// Refuel to full from marketplace
+agent, fuel, transaction, err := ship.Refuel(0, false)
+
+// Refuel 100 units from cargo
+agent, fuel, transaction, err := ship.Refuel(100, true)
+```
+
+## Scanning
+
+### ScanSystems
+
+Scans for nearby systems.
+
+```go
+func (s *Ship) ScanSystems() (*models.ShipCooldown, []models.System, error)
+```
+
+### ScanWaypoints
+
+Scans for waypoints in the current system.
+
+```go
+func (s *Ship) ScanWaypoints() (*models.ShipCooldown, []models.Waypoint, error)
+```
+
+## Cooldowns
+
+### FetchCooldown
+
+Checks the cooldown status of a ship's operations.
+
+```go
+func (s *Ship) FetchCooldown() (*models.ShipCooldown, error)
+```
+
+**Example:**
+```go
+cooldown, err := ship.FetchCooldown()
+if err != nil {
+    log.Fatalf("Failed to fetch cooldown: %v", err)
+}
+if cooldown.RemainingSeconds > 0 {
+    fmt.Printf("Cooldown: %d seconds remaining\n", cooldown.RemainingSeconds)
+    time.Sleep(time.Duration(cooldown.RemainingSeconds) * time.Second)
+}
+```
+
+## Charting
+
+### Chart
+
+Charts the current waypoint, making it visible to other agents.
+
+```go
+func (s *Ship) Chart() (*models.Chart, *models.Waypoint, error)
+```
+
+## Contracts
 
 ### NegotiateContract
 
-- **Purpose**: Negotiates a new contract for the ship.
-- **Usage**: `func (s *Ship) NegotiateContract() (*models.Contract, error)`
+Negotiates a new contract at the current location.
+
+```go
+func (s *Ship) NegotiateContract() (*models.Contract, error)
+```
+
+## Ship Modifications
 
 ### GetMounts
 
-- **Purpose**: Retrieves available mounts for the ship.
-- **Usage**: `func (s *Ship) GetMounts() (*models.MountSymbol, string, string, int, []string, models.ShipRequirements, error)`
+Retrieves the ship's current mounts.
+
+```go
+func (s *Ship) GetMounts() ([]models.ShipMount, error)
+```
 
 ### InstallMount
 
-- **Purpose**: Installs a mount on the ship.
-- **Usage**: `func (s *Ship) InstallMount(mountSymbol models.MountSymbol) (*models.Agent, []models.Mount, *models.Cargo, *models.Transaction, error)`
+Installs a mount on the ship.
+
+```go
+func (s *Ship) InstallMount(mountSymbol models.MountSymbol) (*models.Agent, []models.ShipMount, *models.Cargo, *models.Transaction, error)
+```
 
 ### RemoveMount
 
-- **Purpose**: Removes a mount from the ship.
-- **Usage**: `func (s *Ship) RemoveMount(mountSymbol models.MountSymbol) (*models.Agent, []models.Mount, *models.Cargo, *models.Transaction, error)`
+Removes a mount from the ship.
 
-### GetScrapPrice
+```go
+func (s *Ship) RemoveMount(mountSymbol models.MountSymbol) (*models.Agent, []models.ShipMount, *models.Cargo, *models.Transaction, error)
+```
 
-- **Purpose**: Retrieves the current scrap price of the ship.
-- **Usage**: `func (s *Ship) GetScrapPrice() (*models.Transaction, error)`
-
-### ScrapShip
-
-- **Purpose**: Scraps the ship for resources.
-- **Usage**: `func (s *Ship) ScrapShip() (*models.Transaction, error)`
+## Ship Maintenance
 
 ### GetRepairPrice
 
-- **Purpose**: Retrieves the current repair price of the ship.
-- **Usage**: `func (s *Ship) GetRepairPrice() (*models.Transaction, error)`
+Gets the repair cost for the ship.
+
+```go
+func (s *Ship) GetRepairPrice() (*models.Transaction, error)
+```
 
 ### RepairShip
 
-- **Purpose**: Repairs the ship.
-- **Usage**: `func (s *Ship) RepairShip() (*models.Ship, *models.Transaction, error)`
+Repairs the ship.
 
+```go
+func (s *Ship) RepairShip() (*models.Ship, *models.Transaction, error)
+```
 
+### GetScrapPrice
 
+Gets the scrap value of the ship.
+
+```go
+func (s *Ship) GetScrapPrice() (*models.Transaction, error)
+```
+
+### ScrapShip
+
+Scraps the ship for credits.
+
+```go
+func (s *Ship) ScrapShip() (*models.Transaction, error)
+```

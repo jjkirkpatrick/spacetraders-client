@@ -1,36 +1,211 @@
 # Contract Operations Guide
 
-This guide provides an overview of how to interact with contract-related functionalities using the provided methods in `contracts.go`. Each function is designed to perform specific operations related to contracts in the SpaceTraders API.
+This guide covers contract-related operations using the `entities` package.
 
 ## Getting Started
 
-Before you can use any of the contract functions, ensure you have a client instance created and authenticated. Refer to the client setup guide for instructions on initializing and authenticating your client.
+```go
+import (
+    "github.com/jjkirkpatrick/spacetraders-client/client"
+    "github.com/jjkirkpatrick/spacetraders-client/entities"
+    "github.com/jjkirkpatrick/spacetraders-client/models"
+)
 
-## Function Descriptions
+// Create client
+c, err := client.NewClient(options)
+defer c.Close(ctx)
+
+// Get contracts
+contracts, err := entities.ListContracts(c)
+```
+
+## Functions
 
 ### ListContracts
 
-- **Purpose**: Fetches a list of all contracts available to the player.
-- **Usage**: `ListContracts(client *client.Client) ([]*Contract, error)`
+Fetches all contracts available to the agent.
+
+```go
+func ListContracts(c *client.Client) ([]*Contract, error)
+```
+
+**Example:**
+```go
+contracts, err := entities.ListContracts(c)
+if err != nil {
+    log.Fatalf("Failed to list contracts: %v", err)
+}
+
+for _, contract := range contracts {
+    fmt.Printf("Contract: %s, Type: %s, Accepted: %v\n",
+        contract.ID, contract.Type, contract.Accepted)
+}
+```
 
 ### GetContract
 
-- **Purpose**: Retrieves detailed information about a specific contract by its symbol.
-- **Usage**: `GetContract(client *client.Client, symbol string) (*Contract, error)`
+Retrieves a specific contract by ID.
+
+```go
+func GetContract(c *client.Client, contractID string) (*Contract, error)
+```
+
+**Example:**
+```go
+contract, err := entities.GetContract(c, "contract-id-here")
+if err != nil {
+    log.Fatalf("Failed to get contract: %v", err)
+}
+fmt.Printf("Contract: %s, Fulfilled: %v\n", contract.ID, contract.Fulfilled)
+```
 
 ### Accept
 
-- **Purpose**: Accepts a contract, allowing the player to start fulfilling its requirements.
-- **Usage**: `(c *Contract) Accept() (*models.Agent, *models.Contract, error)`
+Accepts a contract, allowing the agent to start fulfilling its requirements.
+
+```go
+func (c *Contract) Accept() (*Agent, *Contract, error)
+```
+
+**Example:**
+```go
+agent, updatedContract, err := contract.Accept()
+if err != nil {
+    log.Fatalf("Failed to accept contract: %v", err)
+}
+fmt.Printf("Contract accepted! New credit balance: %d\n", agent.Credits)
+```
 
 ### DeliverCargo
 
-- **Purpose**: Delivers cargo to fulfill a contract's requirements.
-- **Usage**: `(c *Contract) DeliverCargo(shop Ship, tradeGood models.GoodSymbol, units int) (*models.Contract, *models.Cargo, error)`
+Delivers cargo from a ship to fulfill contract requirements.
+
+```go
+func (c *Contract) DeliverCargo(ship *Ship, tradeGood models.GoodSymbol, units int) (*Contract, *models.Cargo, error)
+```
+
+**Example:**
+```go
+// Get the ship
+ship, err := entities.GetShip(c, "AGENT-1")
+if err != nil {
+    log.Fatalf("Failed to get ship: %v", err)
+}
+
+// Deliver cargo to the contract
+updatedContract, cargo, err := contract.DeliverCargo(ship, models.GoodSymbol("IRON_ORE"), 100)
+if err != nil {
+    log.Fatalf("Failed to deliver cargo: %v", err)
+}
+
+fmt.Printf("Delivered! Units fulfilled: %d\n",
+    updatedContract.Terms.Deliver[0].UnitsFulfilled)
+```
 
 ### Fulfill
 
-- **Purpose**: Marks a contract as fulfilled, completing it and receiving the rewards.
-- **Usage**: `(c *Contract) Fulfill() (*models.Agent, *models.Contract, error)`
+Marks a contract as fulfilled once all delivery requirements are met.
 
-Each contract operation allows you to interact with the SpaceTraders universe's contracts, providing functionalities such as listing all available contracts, retrieving detailed information about a specific contract, accepting contracts, delivering cargo to fulfill contract requirements, and marking contracts as fulfilled. These operations are crucial for progressing and gaining rewards within the SpaceTraders universe.
+```go
+func (c *Contract) Fulfill() (*models.Agent, *models.Contract, error)
+```
+
+**Example:**
+```go
+agent, fulfilledContract, err := contract.Fulfill()
+if err != nil {
+    log.Fatalf("Failed to fulfill contract: %v", err)
+}
+fmt.Printf("Contract fulfilled! Reward: %d credits\n",
+    fulfilledContract.Terms.Payment.OnFulfilled)
+```
+
+## Contract Workflow
+
+Here's a typical workflow for completing a contract:
+
+```go
+// 1. Get available contracts
+contracts, err := entities.ListContracts(c)
+if err != nil {
+    log.Fatalf("Failed to list contracts: %v", err)
+}
+
+// 2. Find and accept a contract
+for _, contract := range contracts {
+    if !contract.Accepted {
+        agent, contract, err := contract.Accept()
+        if err != nil {
+            log.Printf("Failed to accept contract %s: %v", contract.ID, err)
+            continue
+        }
+        fmt.Printf("Accepted contract: %s\n", contract.ID)
+        break
+    }
+}
+
+// 3. Check delivery requirements
+for _, delivery := range contract.Terms.Deliver {
+    fmt.Printf("Need to deliver %d units of %s to %s\n",
+        delivery.UnitsRequired,
+        delivery.TradeSymbol,
+        delivery.DestinationSymbol)
+}
+
+// 4. Mine/buy the required goods and deliver them
+// ... (mining/trading code)
+
+// 5. Navigate to delivery destination and deliver
+ship, _ := entities.GetShip(c, "AGENT-1")
+ship.Navigate(contract.Terms.Deliver[0].DestinationSymbol)
+// Wait for arrival...
+ship.Dock()
+
+// Deliver the cargo
+contract.DeliverCargo(ship,
+    models.GoodSymbol(contract.Terms.Deliver[0].TradeSymbol),
+    contract.Terms.Deliver[0].UnitsRequired)
+
+// 6. Fulfill the contract once all deliveries are complete
+agent, contract, err := contract.Fulfill()
+if err != nil {
+    log.Fatalf("Failed to fulfill: %v", err)
+}
+fmt.Printf("Contract complete! Earned %d credits\n",
+    contract.Terms.Payment.OnFulfilled)
+```
+
+## Contract Structure
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ID` | string | Unique contract identifier |
+| `FactionSymbol` | string | Faction offering the contract |
+| `Type` | string | Contract type (PROCUREMENT, TRANSPORT, SHUTTLE) |
+| `Terms` | Terms | Contract terms including deliveries and payment |
+| `Accepted` | bool | Whether the contract has been accepted |
+| `Fulfilled` | bool | Whether the contract has been fulfilled |
+| `Expiration` | string | When the contract expires (RFC3339) |
+| `DeadlineToAccept` | string | Deadline to accept the contract |
+
+## Contract Terms
+
+The `Terms` field contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Deadline` | string | Deadline to fulfill the contract |
+| `Payment.OnAccepted` | int | Credits received on acceptance |
+| `Payment.OnFulfilled` | int | Credits received on fulfillment |
+| `Deliver` | []Deliver | List of delivery requirements |
+
+## Delivery Requirements
+
+Each delivery requirement contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `TradeSymbol` | string | The good to deliver |
+| `DestinationSymbol` | string | Waypoint to deliver to |
+| `UnitsRequired` | int | Total units needed |
+| `UnitsFulfilled` | int | Units already delivered |

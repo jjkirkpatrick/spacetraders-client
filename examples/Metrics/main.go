@@ -10,7 +10,7 @@ import (
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
-	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
+	"github.com/jjkirkpatrick/spacetraders-client/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"

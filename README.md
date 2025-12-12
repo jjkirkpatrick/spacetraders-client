@@ -1,357 +1,330 @@
 # SpaceTraders API Client
 
-This document provides a basic overview of how to use the SpaceTraders API client in your Go projects.
+A Go client library for the [SpaceTraders API](https://api.spacetraders.io/v2). Provides rate-limited request handling, automatic pagination, OpenTelemetry observability (metrics, traces, logs), and game reset detection.
 
-Warning - This is a work in progress, not all endpoints have been tested, there willl be bugs and missing features and the api will change over time
+> **Warning**: This is a work in progress. Not all endpoints have been tested. There will be bugs and missing features, and the API may change over time.
 
 ## Installation
 
-To use the SpaceTraders API client, you first need to install the package in your project. Run the following command:
-
-To install the SpaceTraders API client package in your Go project, execute the following command in your terminal:
-
 ```bash
-  go get github.com/jjkirkpatrick/spacetraders-client
+go get github.com/jjkirkpatrick/spacetraders-client
 ```
 
-## Usage
-
-To set up a new client for interacting with the SpaceTraders API, follow these steps:
-
-### Creating a New Client Instance
-
-1. **Import the SpaceTraders client package** into your Go file where you intend to use the client.
-
-2. **Initialize the client**: Create a new instance of the SpaceTraders client by providing the necessary configuration options.
+## Quick Start
 
 ```go
-import(
-	"github.com/jjkirkpatrick/spacetraders-client/client"
+package main
+
+import (
+    "context"
+    "fmt"
+    "log/slog"
+    "os"
+
+    "github.com/jjkirkpatrick/spacetraders-client/client"
+    "github.com/jjkirkpatrick/spacetraders-client/entities"
 )
 
-// Basic client setup without telemetry
+func main() {
+    ctx := context.Background()
+
+    // Create client with default options
+    options := client.DefaultClientOptions()
+    options.Symbol = "YOUR-AGENT-SYMBOL"
+    options.Faction = "COSMIC"
+
+    c, err := client.NewClient(options)
+    if err != nil {
+        slog.Error("Failed to create client", "error", err)
+        os.Exit(1)
+    }
+    defer c.Close(ctx)
+
+    // Get agent information
+    agent, err := entities.GetAgent(c)
+    if err != nil {
+        slog.Error("Failed to get agent", "error", err)
+        os.Exit(1)
+    }
+
+    fmt.Printf("Agent: %s, Credits: %d\n", agent.Symbol, agent.Credits)
+}
+```
+
+## Client Configuration
+
+```go
+options := client.DefaultClientOptions()
+options.Symbol = "YOUR-AGENT-SYMBOL"    // Required: Your agent symbol
+options.Faction = "COSMIC"               // Required for new agents
+options.LogLevel = slog.LevelInfo        // Optional: Log level (default: Info)
+options.RequestQueueSize = 200           // Optional: Queue size (default: 100)
+
+c, err := client.NewClient(options)
+```
+
+## OpenTelemetry Integration
+
+The client supports full OpenTelemetry observability including metrics, traces, and logs. This allows you to monitor your application using Grafana, Prometheus, Jaeger, Loki, or any OTLP-compatible backend.
+
+### Enabling Telemetry
+
+```go
 options := client.DefaultClientOptions()
 options.Symbol = "YOUR-AGENT-SYMBOL"
-options.Faction = "YOUR-FACTION"
-client, err := client.NewClient(options)
+options.Faction = "COSMIC"
 
-// Client setup with OpenTelemetry
-options := client.DefaultClientOptions()
-options.Symbol = "YOUR-AGENT-SYMBOL"
-options.Faction = "YOUR-FACTION"
-
-// Initialize telemetry with default options
+// Enable OpenTelemetry
 options.TelemetryOptions = client.DefaultTelemetryOptions()
-options.TelemetryOptions.ServiceName = "spacetraders-client"
+options.TelemetryOptions.ServiceName = "my-spacetraders-app"
 options.TelemetryOptions.ServiceVersion = "1.0.0"
-options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
+options.TelemetryOptions.OTLPEndpoint = "localhost:4317"  // Your OTLP collector
 options.TelemetryOptions.Environment = "development"
 
-// Optional: Add custom attributes
+// Optional: Add custom attributes to all telemetry
 options.TelemetryOptions.AdditionalAttributes = map[string]string{
     "deployment": "us-west",
     "team": "platform",
 }
 
-// Configure request queue size (default is 100)
-options.RequestQueueSize = 200  // Increase queue size for high-concurrency applications
-
-client, err := client.NewClient(options)
+c, err := client.NewClient(options)
 ```
 
-### Making Requests
+### Setting Up Logging with Loki
+
+The client provides a public `telemetry` package with slog handlers that send logs to both console and OTLP (for Loki):
 
 ```go
-  // All endpoints from the API are represented with a function, the returns struct match that as the return model in the API documentation
-	dock, err := client.DockShip("ship-1")
-	if err != nil {
-		logger.Fatalf("Failed to dock ship: %v", err)
-	}
+import (
+    "log/slog"
+    "os"
 
-	logger.Printf("Docked: %+v", dock.Status)
-```
+    "github.com/jjkirkpatrick/spacetraders-client/client"
+    "github.com/jjkirkpatrick/spacetraders-client/telemetry"
+)
 
-### Paginated Requests
+func main() {
+    ctx := context.Background()
 
-```go
-  // Create a new paginator for the list of factions endpoint
-	Factions, err := client.ListFactions()
-  // Iterate over the results
-	for _, faction := range Factions {
-		logger.Printf("Faction: %+v", faction.Symbol)
-	}
-```
-
-## Telemetry and Monitoring
-
-The client supports OpenTelemetry for metrics and logging. This allows you to monitor your application's performance using various backends like Prometheus or any other OpenTelemetry-compatible system.
-
-### Setting Up OpenTelemetry
-
-1. **Configure the Client**: When creating a new client instance, you can use the default telemetry options and customize them:
-
-```go
-options := client.DefaultClientOptions()
-
-// Get default telemetry options with sensible defaults
-options.TelemetryOptions = client.DefaultTelemetryOptions()
-
-// Customize the options as needed
-options.TelemetryOptions.ServiceName = "your-service-name"
-options.TelemetryOptions.ServiceVersion = "1.0.0"
-options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
-options.TelemetryOptions.Environment = "production"
-
-// Optional: Add custom attributes that will be included in all telemetry
-options.TelemetryOptions.AdditionalAttributes = map[string]string{
-    "deployment": "us-west",
-    "team": "platform",
-}
-```
-
-2. **Available Telemetry Data**:
-   - **Metrics**: Request counts, durations, and error rates
-   - **Attributes**: Each metric includes:
-     - Agent symbol
-     - Endpoint information
-     - HTTP method
-     - Status codes
-     - Error details (when applicable)
-     - Any additional attributes you configured
-
-3. **Graceful Shutdown**: Remember to close the client to ensure all telemetry data is flushed:
-
-```go
-defer client.Close(context.Background())
-```
-
-For more detailed information on various operations and functionalities within the SpaceTraders universe, refer to the following guides in the Docs folder:
-
-- [Ship Operations Guide](Docs/Ships.md): Covers a wide range of ship-related actions, including purchasing, navigating, docking, and managing cargo, among others.
-- [System Operations Guide](Docs/Systems.md): Provides an overview of interacting with system-related functionalities, including listing systems, retrieving detailed system information, and managing waypoints within a system.
-- [Factions Guide](Docs/Factions.md): Details the interactions with factions, including listing factions, understanding faction standings, and participating in faction-related activities.
-- [Contract Operations Guide](Docs/Contracts.md): Explains how to interact with contract-related functionalities, such as listing available contracts, accepting contracts, and fulfilling contract requirements.
-- [Agent Operations Guide](Docs/Agent.md): Describes agent-related operations, including listing public agents, retrieving detailed information about the authenticated agent, and understanding agent dynamics within the universe.
-
-These guides serve as comprehensive resources for understanding how to interact with various aspects of the SpaceTraders universe using the provided client methods.
-
-## Metrics Monitoring with InfluxDB and Grafana
-
-To integrate metrics monitoring with your SpaceTraders API client, follow these steps:
-
-### Setting Up the Metrics Client
-
-1. **Initialize the Metrics Client**: First, you need to create an instance of the `MetricsClient` by providing the InfluxDB connection details including URL, token, organization, and bucket name. This client will be responsible for sending metrics data to InfluxDB.
-
-The NewMetricsClient function takes the following parameters: url, token, org, bucket all of type string
-
-```go
-	metricsReporter := metrics.NewMetricsClient(
-		"http://192.168.1.33:8086",
-		"Token",
-		"spacetraders",
-		"spacetraders",
-	)
-```
-Once you have created the metrics client, you will need to instansiate the spaceTraders client with the metrics client as a parameter
-
-```go
+    // Create client with telemetry enabled
     options := client.DefaultClientOptions()
-    client, cerr := client.NewClient(options, metricsReporter)
+    options.Symbol = "YOUR-AGENT-SYMBOL"
+    options.Faction = "COSMIC"
+    options.TelemetryOptions = client.DefaultTelemetryOptions()
+    options.TelemetryOptions.ServiceName = "my-app"
+    options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
+
+    c, err := client.NewClient(options)
+    if err != nil {
+        slog.Error("Failed to create client", "error", err)
+        os.Exit(1)
+    }
+    defer c.Close(ctx)
+
+    // Set up combined logging (console + OTLP/Loki)
+    consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+    combinedHandler := telemetry.NewCombinedSlogHandler("my-app", slog.LevelInfo, consoleHandler)
+    slog.SetDefault(slog.New(combinedHandler))
+
+    // Logs now go to both console AND Loki via OTLP
+    slog.Info("Application started", "agent", options.Symbol)
+}
 ```
 
-You will now have access to the client.WriteMetric function, as well as the MetricBuilderBuilder
+### Creating Traces
 
 ```go
-	metric, merr := metrics.NewMetricBuilder().
-		Namespace("spacetraders").
-		Tag("agent", agent.Symbol).
-		Field("credits", agent.Credits).
-		Timestamp(time.Now()).
-		Build()
+import "go.opentelemetry.io/otel"
 
-	if merr != nil {
-		logger.Fatalf("Failed to build metric: %v", err)
-	}
+// Get a tracer
+tracer := otel.GetTracerProvider().Tracer("my-app")
 
-	client.WriteMetric(metric)
+// Create a span
+ctx, span := tracer.Start(ctx, "my_operation")
+defer span.End()
+
+// Add attributes to the span
+span.SetAttributes(
+    attribute.String("agent", agent.Symbol),
+    attribute.Int64("credits", agent.Credits),
+)
+
+// Log with trace context (trace_id and span_id auto-injected)
+slog.InfoContext(ctx, "Operation completed", "result", "success")
 ```
 
-#### HTTP Metrics
+### Available Metrics
 
-By Default the Client automatically sends metrics to grafana for each request it makes to allow for tracking of requests per second and error rates: 
+The client automatically exports the following metrics:
 
-#### Disabling Metrics, 
-
-If you don't wish to use Grafana metrics you may pass nil to the MetricsReporter parameter on the NewClient function
-
-```go
-    client, cerr := client.NewClient(options, nil)
-```
-
-Internally this will change the interface used to a no-op interface that will not send any metrics to Influx
-
-To set up InfluxDB and Grafana for monitoring and visualizing metrics, you can use the provided `docker-compose` file. This setup allows you to run InfluxDB and Grafana in containers, making it easy to get started without installing each software individually on your system.
-
-### Prerequisites
-- Docker and Docker Compose installed on your machine.
-
-### Steps to Setup
-1. **Start the Services**: Navigate to the directory containing the `docker-compose.yml` file and run the following command to start InfluxDB and Grafana services:
-   ```bash
-   docker-compose up -d
-   ```
-   This command will download the necessary Docker images and start the services in detached mode.
-
-2. **Access Grafana**: Once the services are up, you can access Grafana by opening `http://localhost:3000` in your web browser. The default login credentials are:
-   - **Username**: admin
-   - **Password**: mysecretpassword
-
-3. **Configure InfluxDB as a DataSource in Grafana**:
-   - In the Grafana dashboard, navigate to **Configuration > Data Sources**.
-   - Click on **Add data source**, and select **InfluxDB**.
-   - Use the following settings to configure the InfluxDB data source:
-     - **URL**: http://influxdb:8086
-     - **ORG**: The name you used when setting up InfluxDB from the web interface.
-     - **Token**: The token you generated when setting up InfluxDB from the web interface.
-   - Click **Save & Test** to verify the connection.
-
-4. **Create Dashboards**: Now, you can create dashboards in Grafana to visualize the metrics stored in InfluxDB. Use the Grafana UI to create and customize your dashboards.
-
-### Stopping the Services
-To stop the InfluxDB and Grafana services, run the following command in the directory containing your `docker-compose.yml` file:
-
-#### Example docker-compose.yml
-```yaml
-version: '3'
-
-services:
-  influxdb:
-    image: influxdb:2.6
-    ports:
-      - "8086:8086"
-    volumes:
-      - influxdb_data:/var/lib/influxdb2
-
-  grafana:
-    image: grafana/grafana:9.4.7
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: mysecretpassword
-    depends_on:
-      - influxdb
-
-volumes:
-  influxdb_data:
-  grafana_data:
-```
+| Metric | Type | Description |
+|--------|------|-------------|
+| `api_requests_total` | Counter | Total API requests made |
+| `api_request_duration_seconds` | Histogram | Request duration |
+| `api_errors_total` | Counter | Total API errors |
+| `api_retries_total` | Counter | Total request retries |
+| `api_rate_limit` | Gauge | Current rate limit |
+| `api_remaining_requests` | Gauge | Requests remaining before rate limit |
+| `api_queue_length` | Gauge | Requests waiting in queue |
+| `api_queue_wait_time_seconds` | Histogram | Time spent waiting in queue |
+| `api_queue_process_time_seconds` | Histogram | Time to process requests |
 
 ## Rate Limiting and Request Queue
 
-The SpaceTraders API enforces rate limits (typically 2 requests per second with bursting capability). To help manage these limits when making concurrent API calls, this client implements a centralized request queue.
+The SpaceTraders API enforces rate limits (2 requests per second with burst capability). The client automatically handles this through a centralized request queue.
 
-### How the Request Queue Works
+### How It Works
 
-1. **Automatic Rate Limiting**: All API requests are automatically queued and processed at a controlled rate to comply with the API's rate limits.
+1. **Automatic Rate Limiting**: All requests are queued and processed at a controlled rate
+2. **Concurrent-Safe**: Multiple goroutines can safely make API calls
+3. **Automatic Retries**: Rate limit errors (429) are automatically retried with exponential backoff
+4. **Adaptive Rate**: The queue adjusts its processing rate based on API responses
 
-2. **Concurrent-Safe**: Multiple goroutines can safely make API calls without worrying about rate limit errors.
-
-3. **Configurable Queue Size**: You can adjust the queue size based on your application's needs:
-
-```go
-options := client.DefaultClientOptions()
-options.RequestQueueSize = 200  // Default is 100
-```
-
-4. **Graceful Shutdown**: The queue is properly cleaned up when the client is closed:
+### Example: Concurrent Requests
 
 ```go
-defer client.Close(context.Background())
-```
-
-### Example: Making Concurrent API Calls
-
-```go
-// Create multiple concurrent requests
 var wg sync.WaitGroup
 
 for i := 0; i < 10; i++ {
     wg.Add(1)
     go func() {
         defer wg.Done()
-        
-        // This call will be automatically queued and rate-limited
-        agent, err := entities.GetAgent(client)
+
+        // Requests are automatically queued and rate-limited
+        agent, err := entities.GetAgent(c)
         if err != nil {
             fmt.Printf("Error: %v\n", err)
             return
         }
-        
+
         fmt.Printf("Agent %s has %d credits\n", agent.Symbol, agent.Credits)
     }()
 }
 
-// Wait for all requests to complete
 wg.Wait()
 ```
 
-Even though the requests are initiated concurrently, they will be processed through the queue at a controlled rate to avoid rate limit errors.
-
-### Telemetry
-
-If you've enabled telemetry, the client provides a `api_queue_length` metric to monitor the number of requests waiting in the queue.
-
 ## Game Reset Handling
 
-The SpaceTraders game undergoes periodic resets (typically weekly or bi-weekly during alpha), which invalidate existing tokens. The client provides a mechanism to detect and handle these resets gracefully.
+The SpaceTraders game undergoes periodic resets which invalidate existing tokens. The client automatically detects these resets.
 
-### How Game Reset Detection Works
-
-1. **Automatic Detection**: The client automatically detects token version mismatch errors, which indicate that the game has been reset.
-
-2. **Non-blocking Notification**: When a game reset is detected, a notification is sent through the `GameResetCh` channel without blocking the client's operation.
-
-3. **Multiple Detection Methods**: The client provides both blocking and non-blocking methods to check for game resets:
+### Detection Methods
 
 ```go
 // Non-blocking check
-if client.IsGameReset() {
-    // Handle game reset (e.g., re-register agent, exit application)
+if c.IsGameReset() {
+    // Handle game reset
 }
 
 // Blocking wait with context
-if client.WaitForGameReset(ctx) {
-    // Handle game reset
+if c.WaitForGameReset(ctx) {
+    // Game reset detected
 }
 ```
 
-### Example: Handling Game Resets
+### Example: Monitoring for Resets
 
 ```go
 // Start a goroutine to monitor for game resets
 go func() {
-    for {
-        // Wait for a game reset or context cancellation
-        if client.WaitForGameReset(ctx) {
-            fmt.Println("Game reset detected! Re-registering agent...")
-            // Re-register agent or exit application
-            break
-        }
+    if c.WaitForGameReset(ctx) {
+        slog.Error("Game reset detected! Re-registration required.")
+        os.Exit(1)
     }
 }()
 
-// In your main request loop, you can also check non-blocking
+// In your main loop
 for {
-    if client.IsGameReset() {
-        break // Stop making requests
+    if c.IsGameReset() {
+        break
     }
-    
+
     // Make API requests...
 }
 ```
 
-For a complete example, see the [Game Reset Handling Example](examples/game_reset_handling/README.md).
+## API Documentation
+
+For detailed information on specific operations, see the guides in the `Docs/` folder:
+
+- [Agent Operations](Docs/Agent.md) - Agent information and public agent queries
+- [Ship Operations](Docs/Ships.md) - Ship management, navigation, mining, trading
+- [System Operations](Docs/Systems.md) - Systems, waypoints, markets, shipyards
+- [Contract Operations](Docs/Contracts.md) - Contract management and fulfillment
+- [Faction Operations](Docs/Factions.md) - Faction information and listings
+
+## Examples
+
+The `examples/` directory contains working examples:
+
+- `quick_start/` - Complete mining bot with contracts
+- `otel_minimal/` - Minimal OpenTelemetry setup
+- `concurrent/` - Concurrent request handling
+- `ships/` - Ship operations
+- `caching/` - System caching
+- `game_reset_handling/` - Game reset detection
+
+## Docker Setup for Observability
+
+To run a local observability stack (Grafana, Tempo, Loki, Prometheus), use this docker-compose:
+
+```yaml
+version: '3.8'
+
+services:
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+  # Tempo (Traces)
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200"
+
+  # Loki (Logs)
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+
+  # Prometheus (Metrics)
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+volumes:
+  grafana-data:
+```
+
+See the `examples/` directory for complete configuration files.
+
+## Graceful Shutdown
+
+Always close the client to ensure telemetry data is flushed:
+
+```go
+defer c.Close(context.Background())
+```
