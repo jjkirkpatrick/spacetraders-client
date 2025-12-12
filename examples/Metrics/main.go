@@ -10,23 +10,25 @@ import (
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type MetricsApp struct {
 	client      *client.Client
 	meter       metric.Meter
+	tracer      trace.Tracer
 	creditGauge metric.Float64ObservableGauge
 }
 
 func newMetricsApp(ctx context.Context) (*MetricsApp, error) {
 	options := client.DefaultClientOptions()
-	options.Symbol = "METRICS_TEST1"
+	options.Symbol = "METRICS-DEMO"
 	options.Faction = "COSMIC"
 
-	// Initialize telemetry with the new public options
 	options.TelemetryOptions = client.DefaultTelemetryOptions()
 	options.TelemetryOptions.ServiceName = "spacetraders-metrics"
 	options.TelemetryOptions.ServiceVersion = "1.0.0"
@@ -38,9 +40,15 @@ func newMetricsApp(ctx context.Context) (*MetricsApp, error) {
 		return nil, err
 	}
 
+	// Set up combined logging
+	consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	combinedHandler := telemetry.NewCombinedSlogHandler("spacetraders-metrics", slog.LevelInfo, consoleHandler)
+	slog.SetDefault(slog.New(combinedHandler))
+
 	app := &MetricsApp{
 		client: spaceClient,
 		meter:  otel.GetMeterProvider().Meter("spacetraders-metrics"),
+		tracer: otel.GetTracerProvider().Tracer("spacetraders-metrics"),
 	}
 
 	app.creditGauge, err = app.meter.Float64ObservableGauge("agent_credits",
@@ -66,32 +74,55 @@ func (app *MetricsApp) setupCreditGaugeCallback(agent *entities.Agent) error {
 	return err
 }
 
-func (app *MetricsApp) run(ctx context.Context) error {
-	app.client.Logger.Info("Starting metrics collection loop")
+func (app *MetricsApp) run(ctx context.Context, iterations int) error {
+	ctx, span := app.tracer.Start(ctx, "metrics_collection_loop")
+	defer span.End()
 
-	// Get agent details and collect metrics
-	for i := 0; i < 2000; i++ {
-		app.client.Logger.Info("Starting iteration", "iteration", i)
+	slog.InfoContext(ctx, "Starting metrics collection loop", "iterations", iterations)
 
-		// No need for artificial delays - the rate limiter in the client will handle pacing
+	for i := 0; i < iterations; i++ {
+		ctx, iterSpan := app.tracer.Start(ctx, "iteration")
+		iterSpan.SetAttributes(attribute.Int("iteration", i+1))
+
+		slog.InfoContext(ctx, "Starting iteration", "iteration", i+1, "total", iterations)
+
 		agent, err := entities.GetAgent(app.client)
 		if err != nil {
-			app.client.Logger.Error("Failed to get agent", "iteration", i, "error", err)
+			iterSpan.RecordError(err)
+			slog.ErrorContext(ctx, "Failed to get agent",
+				"iteration", i+1,
+				"error", err,
+			)
+			iterSpan.End()
 			return err
 		}
-		app.client.Logger.Info("Retrieved agent", "iteration", i, "agent.symbol", agent.Symbol, "agent.credits", agent.Credits)
 
-		// Setup credit gauge
+		slog.InfoContext(ctx, "Agent data retrieved",
+			"iteration", i+1,
+			"symbol", agent.Symbol,
+			"credits", agent.Credits,
+		)
+
 		if err := app.setupCreditGaugeCallback(agent); err != nil {
-			app.client.Logger.Error("Failed to set up credit gauge callback", "iteration", i, "error", err)
+			iterSpan.RecordError(err)
+			slog.ErrorContext(ctx, "Failed to setup credit gauge callback",
+				"iteration", i+1,
+				"error", err,
+			)
+			iterSpan.End()
 			return err
 		}
-		app.client.Logger.Info("Gauge callback set for agent", "iteration", i, "agent.symbol", agent.Symbol)
 
-		app.client.Logger.Info("Iteration completed", "iteration", i)
+		slog.InfoContext(ctx, "Credit gauge updated",
+			"iteration", i+1,
+			"agent", agent.Symbol,
+			"credits", agent.Credits,
+		)
+
+		iterSpan.End()
 	}
-	app.client.Logger.Info("Finished metrics collection loop")
 
+	slog.InfoContext(ctx, "Metrics collection loop completed", "iterations", iterations)
 	return nil
 }
 
@@ -99,38 +130,45 @@ func main() {
 	ctx := context.Background()
 
 	slog.Info("Initializing metrics application")
+
 	app, err := newMetricsApp(ctx)
 	if err != nil {
-		slog.Error("Failed to create metrics app", "error", err)
+		slog.Error("Failed to create metrics application", "error", err)
 		os.Exit(1)
 	}
-	app.client.Logger.Info("Metrics application initialized successfully")
 	defer app.client.Close(ctx)
 
-	app.client.Logger.Info("Waiting 2 seconds for collector connection")
+	// Create root span
+	ctx, rootSpan := app.tracer.Start(ctx, "metrics_demo")
+	defer rootSpan.End()
+
+	slog.InfoContext(ctx, "Metrics application initialized")
+
+	// Wait for collector connection
+	slog.InfoContext(ctx, "Waiting for OTLP collector connection", "delay_seconds", 2)
 	time.Sleep(2 * time.Second)
 
-	app.client.Logger.Info("Setting up graceful shutdown handler")
+	// Set up graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	app.client.Logger.Info("Starting metrics collector goroutine")
+	slog.InfoContext(ctx, "Starting metrics collection")
+
 	errChan := make(chan error, 1)
 	go func() {
-		app.client.Logger.Info("Metrics collector goroutine started")
-		errChan <- app.run(ctx)
+		errChan <- app.run(ctx, 20) // Run 20 iterations
 	}()
 
-	app.client.Logger.Info("Entering main event loop, awaiting errors or shutdown signals")
 	select {
 	case err := <-errChan:
 		if err != nil {
-			app.client.Logger.Error("Application error", "error", err)
+			slog.ErrorContext(ctx, "Application error", "error", err)
 			os.Exit(1)
 		}
-		app.client.Logger.Info("Application completed successfully")
-	case s := <-sigChan:
-		app.client.Logger.Info("Received shutdown signal", "signal", s)
-		app.client.Logger.Info("Shutting down gracefully...")
+		slog.InfoContext(ctx, "Application completed successfully")
+	case sig := <-sigChan:
+		slog.InfoContext(ctx, "Shutdown signal received", "signal", sig.String())
 	}
+
+	slog.InfoContext(ctx, "Metrics demo complete")
 }

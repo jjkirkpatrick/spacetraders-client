@@ -2,55 +2,68 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func main() {
+	ctx := context.Background()
 
-	// Create a client with default options
+	// Create client with telemetry
 	options := client.DefaultClientOptions()
-	options.Symbol = "BLUE1"        // Replace with your agent symbol
-	options.Faction = "COSMIC"      // Replace with your faction
-	options.RequestQueueSize = 1000 // Set a larger request queue size to handle all requests
+	options.Symbol = "CONCURRENT-AGENT"
+	options.Faction = "COSMIC"
+	options.RequestQueueSize = 1000
 
-	// Initialize telemetry with the new public options
 	options.TelemetryOptions = client.DefaultTelemetryOptions()
-	options.TelemetryOptions.ServiceName = "spacetraders-concurrent-agent-requests"
+	options.TelemetryOptions.ServiceName = "spacetraders-concurrent-agent"
 	options.TelemetryOptions.ServiceVersion = "1.0.0"
 	options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
 	options.TelemetryOptions.MetricInterval = 1 * time.Second
 
 	c, err := client.NewClient(options)
 	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+		slog.Error("Failed to create client", "error", err)
+		os.Exit(1)
 	}
+	defer c.Close(ctx)
 
-	defer c.Close(context.Background())
+	// Set up combined logging
+	consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	combinedHandler := telemetry.NewCombinedSlogHandler("spacetraders-concurrent-agent", slog.LevelInfo, consoleHandler)
+	slog.SetDefault(slog.New(combinedHandler))
+
+	// Get tracer
+	tracer := otel.GetTracerProvider().Tracer("spacetraders-concurrent-agent")
+
+	// Create root span
+	ctx, rootSpan := tracer.Start(ctx, "concurrent_agent_requests")
+	defer rootSpan.End()
 
 	// Configuration
 	totalRequests := 20
-	numGoroutines := 1
+	numGoroutines := 4
 	requestsPerGoroutine := totalRequests / numGoroutines
 
-	fmt.Println("This example demonstrates making concurrent API requests using the request queue.")
-	fmt.Println("With our optimized rate limiting, we expect to achieve close to 2 requests per second")
-	fmt.Println("while still avoiding rate limit errors.")
-	fmt.Println()
+	slog.InfoContext(ctx, "Starting concurrent agent request demonstration",
+		"total_requests", totalRequests,
+		"goroutines", numGoroutines,
+		"requests_per_goroutine", requestsPerGoroutine,
+	)
 
-	// Channels for collecting results and errors
+	// Channels for results
 	results := make(chan *entities.Agent, totalRequests)
 	errors := make(chan error, totalRequests)
-
-	// WaitGroup to wait for all goroutines to complete
 	var wg sync.WaitGroup
 
-	fmt.Printf("Starting %d GetAgent requests across %d goroutines...\n", totalRequests, numGoroutines)
 	startTime := time.Now()
 
 	// Launch goroutines
@@ -59,75 +72,95 @@ func main() {
 		go func(routineID int) {
 			defer wg.Done()
 
+			// Create span for this goroutine
+			_, goroutineSpan := tracer.Start(ctx, "goroutine_requests")
+			goroutineSpan.SetAttributes(attribute.Int("goroutine_id", routineID))
+			defer goroutineSpan.End()
+
 			for j := 0; j < requestsPerGoroutine; j++ {
 				requestID := routineID*requestsPerGoroutine + j
 
-				// Get agent information
 				agent, err := entities.GetAgent(c)
 				if err != nil {
-					fmt.Printf("Error in goroutine %d, request %d: %v\n", routineID, requestID, err)
-					errors <- fmt.Errorf("request %d failed: %w", requestID, err)
+					slog.ErrorContext(ctx, "Request failed",
+						"goroutine_id", routineID,
+						"request_id", requestID,
+						"error", err,
+					)
+					errors <- err
 					continue
 				}
 
-				// Send successful result to channel
 				results <- agent
 
-				if j%5 == 0 {
-					fmt.Printf("Goroutine %d completed %d/%d requests\n", routineID, j+1, requestsPerGoroutine)
+				if (j+1)%5 == 0 {
+					slog.InfoContext(ctx, "Goroutine progress",
+						"goroutine_id", routineID,
+						"completed", j+1,
+						"total", requestsPerGoroutine,
+					)
 				}
 			}
 
-			fmt.Printf("Goroutine %d completed all %d requests\n", routineID, requestsPerGoroutine)
+			slog.InfoContext(ctx, "Goroutine completed all requests",
+				"goroutine_id", routineID,
+				"requests", requestsPerGoroutine,
+			)
 		}(i)
 	}
 
-	// Start a goroutine to close channels when all work is done
+	// Close channels when done
 	go func() {
 		wg.Wait()
 		close(results)
 		close(errors)
-		fmt.Printf("\nAll goroutines completed\n")
 	}()
 
-	// Collect and count results
+	// Collect results
 	successCount := 0
-	errorCount := 0
-
-	// Process results as they come in
 	for agent := range results {
 		successCount++
-		if successCount <= 5 || successCount > totalRequests-5 {
-			fmt.Printf("Agent %s has %d credits\n", agent.Symbol, agent.Credits)
-		} else if successCount == 6 {
-			fmt.Println("... (showing only first and last 5 results) ...")
+		if successCount <= 3 || successCount > totalRequests-3 {
+			slog.InfoContext(ctx, "Agent response received",
+				"request_num", successCount,
+				"symbol", agent.Symbol,
+				"credits", agent.Credits,
+			)
+		} else if successCount == 4 {
+			slog.InfoContext(ctx, "Continuing to process responses...",
+				"showing", "first 3 and last 3 only",
+			)
 		}
 	}
 
-	// Process errors
+	// Count errors
+	errorCount := 0
 	for err := range errors {
 		errorCount++
-		if errorCount <= 5 {
-			fmt.Printf("Error: %v\n", err)
-		} else if errorCount == 6 {
-			fmt.Println("... (more errors omitted) ...")
+		if errorCount <= 3 {
+			slog.ErrorContext(ctx, "Request error", "error", err)
 		}
 	}
 
 	duration := time.Since(startTime)
-	fmt.Printf("\nSummary:\n")
-	fmt.Printf("- Total requests: %d\n", totalRequests)
-	fmt.Printf("- Successful requests: %d\n", successCount)
-	fmt.Printf("- Failed requests: %d\n", errorCount)
-	fmt.Printf("- Time taken: %v\n", duration)
-	fmt.Printf("- Average time per request: %v\n", duration/time.Duration(totalRequests))
+	rootSpan.SetAttributes(
+		attribute.Int("requests.total", totalRequests),
+		attribute.Int("requests.success", successCount),
+		attribute.Int("requests.failed", errorCount),
+		attribute.Int64("duration_ms", duration.Milliseconds()),
+	)
+
+	slog.InfoContext(ctx, "Concurrent request test complete",
+		"total_requests", totalRequests,
+		"successful", successCount,
+		"failed", errorCount,
+		"duration", duration.String(),
+		"avg_per_request", (duration / time.Duration(totalRequests)).String(),
+	)
 
 	if successCount == totalRequests {
-		fmt.Println("\nSUCCESS: All requests completed without errors!")
+		slog.InfoContext(ctx, "All requests completed successfully")
 	} else {
-		fmt.Printf("\nWARNING: %d requests failed\n", errorCount)
+		slog.WarnContext(ctx, "Some requests failed", "failed_count", errorCount)
 	}
-
-	fmt.Println("\nNote: Even though requests were made concurrently across multiple goroutines,")
-	fmt.Println("the request queue ensured they were processed at a controlled rate to respect API rate limits.")
 }

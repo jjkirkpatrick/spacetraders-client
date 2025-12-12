@@ -73,3 +73,33 @@ func GetPublicAgent(get GetFunc, agentSymbol string) (*models.Agent, *models.API
 
 	return response.Data, nil
 }
+
+// GetServerStatus retrieves the server status and game information
+func GetServerStatus(get GetFunc) (*models.ServerStatusResponse, *models.APIError) {
+	endpoint := "/"
+
+	var response struct {
+		Data models.ServerStatusResponse `json:"data"`
+	}
+
+	err := get(endpoint, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Data, nil
+}
+
+// Register creates a new agent in the game
+func Register(post PostFunc, request *models.RegisterRequest) (*models.RegisterResponse, *models.APIError) {
+	endpoint := "/register"
+
+	var response models.RegisterResponse
+
+	err := post(endpoint, request, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}

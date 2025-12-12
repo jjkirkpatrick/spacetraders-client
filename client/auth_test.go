@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"testing"
 
@@ -23,6 +24,8 @@ func TestGetOrRegisterToken(t *testing.T) {
 		context:     context.Background(),
 		retryDelay:  options.RetryDelay,
 		CacheClient: cache.NewCache(),
+		Logger:      slog.Default(),
+		RateLimiter: NewRateLimiter(2.0, 10.0),
 	}
 
 	// Test for valid faction and symbol
@@ -57,6 +60,8 @@ func TestTokenFileOperations(t *testing.T) {
 		context:     context.Background(),
 		retryDelay:  options.RetryDelay,
 		CacheClient: cache.NewCache(),
+		Logger:      slog.Default(),
+		RateLimiter: NewRateLimiter(2.0, 10.0),
 	}
 
 	// Ensure token file is clean before tests

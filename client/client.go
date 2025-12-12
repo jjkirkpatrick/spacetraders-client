@@ -33,8 +33,17 @@ type TelemetryOptions struct {
 	Environment string
 	// OTLPEndpoint is the endpoint for your OpenTelemetry collector (required if telemetry is enabled)
 	OTLPEndpoint string
-	// MetricInterval is how often metrics are exported (defaults to 15s)
+	// MetricInterval is how often metrics are exported (defaults to 5s)
 	MetricInterval time.Duration
+	// TraceSampleRate controls the fraction of traces to sample (0.0 to 1.0)
+	// 1.0 means sample all traces, 0.1 means sample 10% of traces
+	TraceSampleRate float64
+	// EnableMetrics enables metric collection (default: true)
+	EnableMetrics bool
+	// EnableTracing enables distributed tracing (default: true)
+	EnableTracing bool
+	// EnableLogging enables log export to OTLP (default: true)
+	EnableLogging bool
 	// AdditionalAttributes are any extra attributes to add to all telemetry
 	AdditionalAttributes map[string]string
 	// GRPCDialOptions are additional options for the gRPC connection to the collector
@@ -237,11 +246,14 @@ func DefaultClientOptions() ClientOptions {
 // DefaultTelemetryOptions returns the default configuration options for OpenTelemetry
 func DefaultTelemetryOptions() *TelemetryOptions {
 	return &TelemetryOptions{
-		Environment:    "development",
-		MetricInterval: 1 * time.Second,
+		Environment:     "development",
+		MetricInterval:  5 * time.Second,
+		TraceSampleRate: 1.0, // Sample all traces by default
+		EnableMetrics:   true,
+		EnableTracing:   true,
+		EnableLogging:   true,
 		GRPCDialOptions: []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
 		},
 	}
 }
@@ -285,11 +297,15 @@ func NewClient(options ClientOptions) (*Client, error) {
 	if options.TelemetryOptions != nil {
 		// Convert public options to internal config
 		telemetryConfig := telemetry.Config{
-			ServiceName:    options.TelemetryOptions.ServiceName,
-			ServiceVersion: options.TelemetryOptions.ServiceVersion,
-			Environment:    options.TelemetryOptions.Environment,
-			OTLPEndpoint:   options.TelemetryOptions.OTLPEndpoint,
-			MetricInterval: options.TelemetryOptions.MetricInterval,
+			ServiceName:     options.TelemetryOptions.ServiceName,
+			ServiceVersion:  options.TelemetryOptions.ServiceVersion,
+			Environment:     options.TelemetryOptions.Environment,
+			OTLPEndpoint:    options.TelemetryOptions.OTLPEndpoint,
+			MetricInterval:  options.TelemetryOptions.MetricInterval,
+			TraceSampleRate: options.TelemetryOptions.TraceSampleRate,
+			EnableMetrics:   options.TelemetryOptions.EnableMetrics,
+			EnableTracing:   options.TelemetryOptions.EnableTracing,
+			EnableLogging:   options.TelemetryOptions.EnableLogging,
 		}
 
 		// Convert additional attributes to KeyValue pairs
@@ -312,7 +328,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		}
 		client.telemetryProviders = providers
 
-		// Initialize metrics and tracer
+		// Initialize metrics (if enabled)
 		client.meter = otel.GetMeterProvider().Meter("spacetraders-client")
 
 		var merr error
@@ -521,8 +537,12 @@ func (c *Client) executeRequest(method, endpoint string, body interface{}, query
 		SetAuthToken(c.token).
 		SetResult(result)
 
+	// For POST/PUT/PATCH requests, always send a body (empty object if nil)
+	// The SpaceTraders API requires {} instead of empty string for JSON endpoints
 	if body != nil {
 		request.SetBody(body)
+	} else if method == "POST" || method == "PUT" || method == "PATCH" {
+		request.SetBody(struct{}{})
 	}
 
 	if queryParams != nil {

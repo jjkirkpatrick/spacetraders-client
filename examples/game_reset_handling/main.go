@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"sync"
@@ -12,105 +11,138 @@ import (
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
+var tracer trace.Tracer
+
 func main() {
-	// Create a client with default options
+	ctx := context.Background()
+
+	// Create client with telemetry
 	options := client.DefaultClientOptions()
-	options.Symbol = "BLUE1"       // Replace with your agent symbol
-	options.Faction = "COSMIC"     // Replace with your faction
-	options.RequestQueueSize = 100 // Set request queue size
+	options.Symbol = "RESET-DEMO"
+	options.Faction = "COSMIC"
+	options.RequestQueueSize = 100
+	options.TelemetryOptions = client.DefaultTelemetryOptions()
+	options.TelemetryOptions.ServiceName = "spacetraders-reset-handler"
+	options.TelemetryOptions.ServiceVersion = "1.0.0"
+	options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
 
 	c, err := client.NewClient(options)
 	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+		slog.Error("Failed to create client", "error", err)
+		os.Exit(1)
 	}
-	defer c.Close(context.Background())
+	defer c.Close(ctx)
 
-	// Create a context that can be cancelled
-	ctx, cancel := context.WithCancel(context.Background())
+	// Set up combined logging
+	consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	combinedHandler := telemetry.NewCombinedSlogHandler("spacetraders-reset-handler", slog.LevelInfo, consoleHandler)
+	slog.SetDefault(slog.New(combinedHandler))
+
+	// Get tracer
+	tracer = otel.GetTracerProvider().Tracer("spacetraders-reset-handler")
+
+	// Create root span
+	ctx, rootSpan := tracer.Start(ctx, "game_session")
+	defer rootSpan.End()
+
+	// Create cancellable context
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Set up signal handling for graceful shutdown
+	// Set up signal handling
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-sigCh
-		fmt.Println("\nShutting down...")
+		sig := <-sigCh
+		slog.InfoContext(ctx, "Shutdown signal received", "signal", sig.String())
 		cancel()
 	}()
 
-	// Start a goroutine to monitor for game resets
+	// Start monitoring goroutines
 	var wg sync.WaitGroup
+
 	wg.Add(1)
 	go monitorGameReset(ctx, c, &wg)
 
-	// Start making API requests in a loop
 	wg.Add(1)
 	go makeRequests(ctx, c, &wg)
 
-	fmt.Println("Application running. Press Ctrl+C to exit.")
+	slog.InfoContext(ctx, "Game reset handler running, press Ctrl+C to exit")
 	wg.Wait()
-	fmt.Println("Application shutdown complete.")
+
+	slog.InfoContext(ctx, "Application shutdown complete")
 }
 
-// monitorGameReset monitors for game resets and handles them
 func monitorGameReset(ctx context.Context, c *client.Client, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	ctx, span := tracer.Start(ctx, "game_reset_monitor")
+	defer span.End()
+
+	slog.InfoContext(ctx, "Game reset monitor started")
+
 	for {
-		// Wait for either a game reset or context cancellation
 		resetDetected := c.WaitForGameReset(ctx)
 
 		if !resetDetected {
-			// Context was cancelled, exit the loop
-			fmt.Println("Game reset monitor shutting down...")
+			slog.InfoContext(ctx, "Game reset monitor shutting down")
 			return
 		}
 
-		// Game reset was detected
-		fmt.Println("\n!!! GAME RESET DETECTED !!!")
-		fmt.Println("The SpaceTraders game has been reset.")
-		fmt.Println("You need to re-register your agent.")
-		fmt.Println("Exiting application...")
+		slog.ErrorContext(ctx, "Game reset detected",
+			"action", "re-registration required",
+			"status", "exiting",
+		)
 
-		// Cancel the context to signal all goroutines to shut down
-		// This is a more severe action that will terminate the application
 		os.Exit(1)
 	}
 }
 
-// makeRequests makes API requests in a loop
 func makeRequests(ctx context.Context, c *client.Client, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	ctx, span := tracer.Start(ctx, "request_loop")
+	defer span.End()
+
+	slog.InfoContext(ctx, "Request loop started")
 
 	requestCount := 0
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("Request loop shutting down...")
+			slog.InfoContext(ctx, "Request loop shutting down", "total_requests", requestCount)
 			return
 		default:
-			// Check if a game reset has been detected (non-blocking)
 			if c.IsGameReset() {
-				fmt.Println("Request loop detected game reset, stopping...")
+				slog.WarnContext(ctx, "Game reset detected in request loop, stopping")
 				return
 			}
 
-			// Make an API request
 			requestCount++
-			fmt.Printf("Making request #%d...\n", requestCount)
 
+			ctx, reqSpan := tracer.Start(ctx, "get_agent_request")
 			agent, err := entities.GetAgent(c)
 			if err != nil {
-				fmt.Printf("Error getting agent: %v\n", err)
-				// Continue making requests even if there's an error
-				// The game reset detection will handle token version mismatch errors
+				reqSpan.RecordError(err)
+				slog.ErrorContext(ctx, "Failed to get agent",
+					"request_num", requestCount,
+					"error", err,
+				)
+				reqSpan.End()
 			} else {
-				fmt.Printf("Agent %s has %d credits\n", agent.Symbol, agent.Credits)
+				slog.InfoContext(ctx, "Agent status",
+					"request_num", requestCount,
+					"symbol", agent.Symbol,
+					"credits", agent.Credits,
+				)
+				reqSpan.End()
 			}
 
-			// Wait a bit before making the next request
 			time.Sleep(2 * time.Second)
 		}
 	}

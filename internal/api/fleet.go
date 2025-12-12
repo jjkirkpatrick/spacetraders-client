@@ -138,7 +138,7 @@ func DockShip(post PostFunc, ShipSymbol string) (*models.ShipNav, *models.APIErr
 	var response struct {
 		Data struct {
 			Nav models.ShipNav `json:"nav"`
-		} `json:"Data"`
+		} `json:"data"`
 	}
 
 	err := post(endpoint, nil, nil, &response)
@@ -264,14 +264,16 @@ func PatchShipNav(patch PatchFunc, ShipSymbol string, payload *models.NavUpdateR
 func GetShipNav(get GetFunc, ShipSymbol string) (*models.ShipNav, *models.APIError) {
 	endpoint := fmt.Sprintf("/my/ships/%s/nav", ShipSymbol)
 
-	var response models.ShipNav
+	var response struct {
+		Data models.ShipNav `json:"data"`
+	}
 
 	err := get(endpoint, nil, &response)
 	if err != nil {
 		return nil, err
 	}
 
-	return &response, nil
+	return &response.Data, nil
 }
 
 // WarpShip initiates a warp for a models.Ship to another system
@@ -332,7 +334,7 @@ func ScanWaypoints(post PostFunc, ShipSymbol string) (*models.ScanWaypointsRespo
 
 // ScanShips scans for models.Ships within range
 func ScanShips(post PostFunc, ShipSymbol string) (*models.ScanShipsResponse, *models.APIError) {
-	endpoint := fmt.Sprintf("/my/ships/%s/scan/Ships", ShipSymbol)
+	endpoint := fmt.Sprintf("/my/ships/%s/scan/ships", ShipSymbol)
 
 	var response models.ScanShipsResponse
 
@@ -497,6 +499,48 @@ func RepairShip(post PostFunc, ShipSymbol string) (*models.RepairShipResponse, *
 	var response models.RepairShipResponse
 
 	err := post(endpoint, nil, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// GetModules retrieves the modules installed on a specific models.Ship
+func GetModules(get GetFunc, ShipSymbol string) (*models.GetModulesResponse, *models.APIError) {
+	endpoint := fmt.Sprintf("/my/ships/%s/modules", ShipSymbol)
+
+	var response models.GetModulesResponse
+
+	err := get(endpoint, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// InstallModule installs a module on a models.Ship
+func InstallModule(post PostFunc, ShipSymbol string, payload *models.InstallModuleRequest) (*models.InstallModuleResponse, *models.APIError) {
+	endpoint := fmt.Sprintf("/my/ships/%s/modules/install", ShipSymbol)
+
+	var response models.InstallModuleResponse
+
+	err := post(endpoint, payload, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// RemoveModule removes a module from a models.Ship
+func RemoveModule(post PostFunc, ShipSymbol string, payload *models.RemoveModuleRequest) (*models.RemoveModuleResponse, *models.APIError) {
+	endpoint := fmt.Sprintf("/my/ships/%s/modules/remove", ShipSymbol)
+
+	var response models.RemoveModuleResponse
+
+	err := post(endpoint, payload, nil, &response)
 	if err != nil {
 		return nil, err
 	}

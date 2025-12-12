@@ -50,3 +50,11 @@ type InstallMountRequest struct {
 type RemoveMountRequest struct {
 	Symbol MountSymbol `json:"symbol"`
 }
+
+type InstallModuleRequest struct {
+	Symbol string `json:"symbol"`
+}
+
+type RemoveModuleRequest struct {
+	Symbol string `json:"symbol"`
+}

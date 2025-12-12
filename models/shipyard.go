@@ -15,16 +15,17 @@ const (
 	ShipOreHound          ShipType = "SHIP_ORE_HOUND"
 	ShipRefiningFreighter ShipType = "SHIP_REFINING_FREIGHTER"
 	ShipSurveyor          ShipType = "SHIP_SURVEYOR"
+	ShipBulkFreighter     ShipType = "SHIP_BULK_FREIGHTER"
 )
 
 type Shipyard struct {
-	Symbol    string `json:"symbol" `
+	Symbol    string `json:"symbol"`
 	ShipTypes []struct {
-		Type ShipType `json:"type" `
-	} `json:"shipTypes" `
-	Transactions  []Transaction  `json:"transactions"`
-	Ships         []ShipyardShip `json:"ships"`
-	Modifications int            `json:"monificationFee"`
+		Type ShipType `json:"type"`
+	} `json:"shipTypes"`
+	Transactions    []Transaction  `json:"transactions"`
+	Ships           []ShipyardShip `json:"ships"`
+	ModificationsFee int           `json:"modificationsFee"`
 }
 
 type Transaction struct {

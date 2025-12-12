@@ -1,5 +1,56 @@
 package models
 
+type ServerStatusResponse struct {
+	Status      string `json:"status"`
+	Version     string `json:"version"`
+	ResetDate   string `json:"resetDate"`
+	Description string `json:"description"`
+	Stats       struct {
+		Agents    int `json:"agents"`
+		Ships     int `json:"ships"`
+		Systems   int `json:"systems"`
+		Waypoints int `json:"waypoints"`
+	} `json:"stats"`
+	Leaderboards struct {
+		MostCredits []struct {
+			AgentSymbol string `json:"agentSymbol"`
+			Credits     int64  `json:"credits"`
+		} `json:"mostCredits"`
+		MostSubmittedCharts []struct {
+			AgentSymbol string `json:"agentSymbol"`
+			ChartCount  int    `json:"chartCount"`
+		} `json:"mostSubmittedCharts"`
+	} `json:"leaderboards"`
+	ServerResets struct {
+		Next      string `json:"next"`
+		Frequency string `json:"frequency"`
+	} `json:"serverResets"`
+	Announcements []struct {
+		Title string `json:"title"`
+		Body  string `json:"body"`
+	} `json:"announcements"`
+	Links []struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	} `json:"links"`
+}
+
+type RegisterRequest struct {
+	Faction string `json:"faction"`
+	Symbol  string `json:"symbol"`
+	Email   string `json:"email,omitempty"`
+}
+
+type RegisterResponse struct {
+	Data struct {
+		Agent    Agent    `json:"agent"`
+		Contract Contract `json:"contract"`
+		Faction  Faction  `json:"faction"`
+		Ship     Ship     `json:"ship"`
+		Token    string   `json:"token"`
+	} `json:"data"`
+}
+
 type CreateChartResponse struct {
 	Data struct {
 		Chart    Chart    `json:"chart"`
@@ -130,14 +181,7 @@ type NegotiateContractResponse struct {
 }
 
 type GetMountsResponse struct {
-	Data struct {
-		Symbol       MountSymbol      `json:"symbol"`
-		Name         string           `json:"name"`
-		Description  string           `json:"description"`
-		Strength     int              `json:"strength"`
-		Depsits      []string         `json:"deposits"`
-		Requirements ShipRequirements `json:"requirements"`
-	} `json:"data"`
+	Data []ShipMount `json:"data"`
 }
 type InstallMountResponse struct {
 	Data struct {
@@ -283,5 +327,41 @@ type SupplyConstructionSiteResponse struct {
 	Data struct {
 		Construction ConstructionSite `json:"construction"`
 		Cargo        Cargo            `json:"cargo"`
+	} `json:"data"`
+}
+
+type GetModulesResponse struct {
+	Data []ShipModule `json:"data"`
+}
+
+type ModuleTransaction struct {
+	WaypointSymbol string `json:"waypointSymbol"`
+	ShipSymbol     string `json:"shipSymbol"`
+	TradeSymbol    string `json:"tradeSymbol"`
+	TotalPrice     int    `json:"totalPrice"`
+	Timestamp      string `json:"timestamp"`
+}
+
+type InstallModuleResponse struct {
+	Data struct {
+		Agent       Agent             `json:"agent"`
+		Modules     []ShipModule      `json:"modules"`
+		Cargo       Cargo             `json:"cargo"`
+		Transaction ModuleTransaction `json:"transaction"`
+	} `json:"data"`
+}
+
+type RemoveModuleResponse struct {
+	Data struct {
+		Agent       Agent             `json:"agent"`
+		Modules     []ShipModule      `json:"modules"`
+		Cargo       Cargo             `json:"cargo"`
+		Transaction ModuleTransaction `json:"transaction"`
+	} `json:"data"`
+}
+
+type SupplyChainResponse struct {
+	Data struct {
+		ExportToImportMap map[string][]string `json:"exportToImportMap"`
 	} `json:"data"`
 }

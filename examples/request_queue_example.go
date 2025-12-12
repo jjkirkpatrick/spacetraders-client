@@ -2,60 +2,103 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/entities"
+	"github.com/jjkirkpatrick/spacetraders-client/internal/telemetry"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func main() {
-	// Create a client with default options
+	ctx := context.Background()
+
+	// Create client with telemetry
 	options := client.DefaultClientOptions()
-	options.Symbol = "BLUE1"       // Replace with your agent symbol
-	options.Faction = "COSMIC"     // Replace with your faction
-	options.RequestQueueSize = 100 // Set the request queue size
+	options.Symbol = "QUEUE-DEMO"
+	options.Faction = "COSMIC"
+	options.RequestQueueSize = 100
+	options.TelemetryOptions = client.DefaultTelemetryOptions()
+	options.TelemetryOptions.ServiceName = "spacetraders-queue-demo"
+	options.TelemetryOptions.ServiceVersion = "1.0.0"
+	options.TelemetryOptions.OTLPEndpoint = "localhost:4317"
 
 	c, err := client.NewClient(options)
 	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+		slog.Error("Failed to create client", "error", err)
+		os.Exit(1)
 	}
-	defer c.Close(context.Background())
+	defer c.Close(ctx)
 
-	// Demonstrate concurrent API calls
-	var wg sync.WaitGroup
+	// Set up combined logging
+	consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	combinedHandler := telemetry.NewCombinedSlogHandler("spacetraders-queue-demo", slog.LevelInfo, consoleHandler)
+	slog.SetDefault(slog.New(combinedHandler))
+
+	// Get tracer
+	tracer := otel.GetTracerProvider().Tracer("spacetraders-queue-demo")
+
+	// Create root span
+	ctx, rootSpan := tracer.Start(ctx, "request_queue_demo")
+	defer rootSpan.End()
+
+	// Configuration
 	requestCount := 10
 
-	fmt.Println("Starting concurrent API calls...")
+	slog.InfoContext(ctx, "Starting request queue demonstration",
+		"concurrent_requests", requestCount,
+		"queue_size", options.RequestQueueSize,
+	)
+
+	var wg sync.WaitGroup
 	startTime := time.Now()
 
 	// Make multiple concurrent requests
+	ctx, concurrentSpan := tracer.Start(ctx, "concurrent_requests")
+	concurrentSpan.SetAttributes(attribute.Int("request_count", requestCount))
+
 	for i := 0; i < requestCount; i++ {
 		wg.Add(1)
-		go func(i int) {
+		go func(requestID int) {
 			defer wg.Done()
 
-			// Get agent information
 			agent, err := entities.GetAgent(c)
 			if err != nil {
-				fmt.Printf("Error getting agent (request %d): %v\n", i, err)
+				slog.ErrorContext(ctx, "Request failed",
+					"request_id", requestID,
+					"error", err,
+				)
 				return
 			}
 
-			fmt.Printf("Request %d: Agent %s has %d credits\n", i, agent.Symbol, agent.Credits)
+			slog.InfoContext(ctx, "Request completed",
+				"request_id", requestID,
+				"agent", agent.Symbol,
+				"credits", agent.Credits,
+			)
 
-			// Small delay between starting goroutines to demonstrate they're concurrent
+			// Small delay to demonstrate concurrent starts
 			time.Sleep(50 * time.Millisecond)
 		}(i)
 	}
 
-	// Wait for all requests to complete
 	wg.Wait()
-	duration := time.Since(startTime)
+	concurrentSpan.End()
 
-	fmt.Printf("\nAll %d requests completed in %v\n", requestCount, duration)
-	fmt.Println("Note: Requests were processed through the queue at a controlled rate")
-	fmt.Println("Even though the goroutines started concurrently, the API calls were rate-limited")
+	duration := time.Since(startTime)
+	rootSpan.SetAttributes(
+		attribute.Int("requests.total", requestCount),
+		attribute.Int64("duration_ms", duration.Milliseconds()),
+	)
+
+	slog.InfoContext(ctx, "Request queue demonstration complete",
+		"requests", requestCount,
+		"duration", duration.String(),
+	)
+
+	slog.InfoContext(ctx, "Note: All requests were rate-limited by the queue despite concurrent starts")
 }

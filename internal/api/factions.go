@@ -6,7 +6,7 @@ import (
 	"github.com/jjkirkpatrick/spacetraders-client/models"
 )
 
-func GetFaction(get GetFunc, factionSymbol string) (*models.Faction, error) {
+func GetFaction(get GetFunc, factionSymbol string) (*models.Faction, *models.APIError) {
 	endpoint := fmt.Sprintf("/factions/%s", factionSymbol)
 
 	var response struct {
@@ -15,7 +15,7 @@ func GetFaction(get GetFunc, factionSymbol string) (*models.Faction, error) {
 
 	err := get(endpoint, nil, &response)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list agents: %v", err)
+		return nil, err
 	}
 
 	return &response.Data, nil

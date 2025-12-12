@@ -431,13 +431,13 @@ func (s *Ship) NegotiateContract() (*models.Contract, error) {
 	return &response.Data.Contract, nil
 }
 
-func (s *Ship) GetMounts() (*models.MountSymbol, string, string, int, []string, models.ShipRequirements, error) {
+func (s *Ship) GetMounts() ([]models.ShipMount, error) {
 	response, err := api.GetMounts(s.Client.Get, s.Symbol)
 	if err != nil {
-		return nil, "", "", 0, nil, models.ShipRequirements{}, err.AsError()
+		return nil, err.AsError()
 	}
 
-	return &response.Data.Symbol, response.Data.Name, response.Data.Description, response.Data.Strength, response.Data.Depsits, response.Data.Requirements, nil
+	return response.Data, nil
 }
 
 func (s *Ship) InstallMount(mountSymbol models.MountSymbol) (*models.Agent, []models.ShipMount, *models.Cargo, *models.Transaction, error) {

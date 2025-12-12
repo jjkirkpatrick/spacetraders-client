@@ -157,20 +157,20 @@ const (
 type MarketTradeSupply string
 
 const (
-	Scarse   MarketTradeSupply = "SCARSE"
+	Scarce   MarketTradeSupply = "SCARCE"
 	Limited  MarketTradeSupply = "LIMITED"
 	Moderate MarketTradeSupply = "MODERATE"
 	High     MarketTradeSupply = "HIGH"
 	Abundant MarketTradeSupply = "ABUNDANT"
 )
 
-type MarketTradeAvtivity string
+type MarketTradeActivity string
 
 const (
-	Weak       MarketTradeAvtivity = "WEAK"
-	Growing    MarketTradeAvtivity = "GROWING"
-	Strong     MarketTradeAvtivity = "STRONG"
-	Restricted MarketTradeAvtivity = "RESTRICTED"
+	Weak       MarketTradeActivity = "WEAK"
+	Growing    MarketTradeActivity = "GROWING"
+	Strong     MarketTradeActivity = "STRONG"
+	Restricted MarketTradeActivity = "RESTRICTED"
 )
 
 type MarketTradeGoods struct {
@@ -178,7 +178,7 @@ type MarketTradeGoods struct {
 	Type          MarketTradeGoodType `json:"type"`
 	TradeVolume   int                 `json:"tradeVolume"`
 	Supply        MarketTradeSupply   `json:"supply"`
-	Activity      MarketTradeAvtivity `json:"activity"`
+	Activity      MarketTradeActivity `json:"activity"`
 	PurchasePrice int                 `json:"purchasePrice"`
 	SellPrice     int                 `json:"sellPrice"`
 }
