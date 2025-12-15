@@ -527,9 +527,39 @@ func (c *Client) Patch(endpoint string, body interface{}, queryParams map[string
 	return c.requestQueue.Enqueue("PATCH", endpoint, body, queryParams, result)
 }
 
+// GetWithContext sends a GET request with context for metric labeling.
+// Use WithMetricLabels to add custom labels to the context.
+func (c *Client) GetWithContext(ctx context.Context, endpoint string, queryParams map[string]string, result interface{}) *models.APIError {
+	return c.requestQueue.EnqueueWithContext(ctx, "GET", endpoint, nil, queryParams, result)
+}
+
+// PostWithContext sends a POST request with context for metric labeling.
+// Use WithMetricLabels to add custom labels to the context.
+func (c *Client) PostWithContext(ctx context.Context, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+	return c.requestQueue.EnqueueWithContext(ctx, "POST", endpoint, body, queryParams, result)
+}
+
+// PutWithContext sends a PUT request with context for metric labeling.
+// Use WithMetricLabels to add custom labels to the context.
+func (c *Client) PutWithContext(ctx context.Context, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+	return c.requestQueue.EnqueueWithContext(ctx, "PUT", endpoint, body, queryParams, result)
+}
+
+// DeleteWithContext sends a DELETE request with context for metric labeling.
+// Use WithMetricLabels to add custom labels to the context.
+func (c *Client) DeleteWithContext(ctx context.Context, endpoint string, queryParams map[string]string, result interface{}) *models.APIError {
+	return c.requestQueue.EnqueueWithContext(ctx, "DELETE", endpoint, nil, queryParams, result)
+}
+
+// PatchWithContext sends a PATCH request with context for metric labeling.
+// Use WithMetricLabels to add custom labels to the context.
+func (c *Client) PatchWithContext(ctx context.Context, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+	return c.requestQueue.EnqueueWithContext(ctx, "PATCH", endpoint, body, queryParams, result)
+}
+
 // executeRequest executes an HTTP request with the given parameters
 // This is used by the request queue to process requests
-func (c *Client) executeRequest(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+func (c *Client) executeRequest(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 	startTime := time.Now()
 
 	request := c.httpClient.R().
@@ -586,8 +616,8 @@ func (c *Client) executeRequest(method, endpoint string, body interface{}, query
 		}
 	}
 
-	// Record metrics with rate limit information
-	c.recordMetrics(method, endpoint, duration, statusCode, err, rateLimit)
+	// Record metrics with custom labels from context
+	c.recordMetrics(ctx, method, endpoint, duration, statusCode, err, rateLimit)
 
 	// If successful, return immediately
 	if err == nil && !resp.IsError() {
@@ -677,16 +707,23 @@ func (c *Client) executeRequest(method, endpoint string, body interface{}, query
 	return nil
 }
 
-func (c *Client) recordMetrics(method, endpoint string, duration time.Duration, statusCode int, err error, rateLimit *RateLimitResponse) {
+func (c *Client) recordMetrics(ctx context.Context, method, endpoint string, duration time.Duration, statusCode int, err error, rateLimit *RateLimitResponse) {
 	if c.meter == nil {
 		return // Telemetry is disabled
 	}
 
+	// Start with base attributes
 	attrs := []attribute.KeyValue{
 		attribute.String("agent", c.AgentSymbol),
 		attribute.String("endpoint", endpoint),
 		attribute.String("method", method),
 		attribute.Int("status_code", statusCode),
+	}
+
+	// Add custom labels from context
+	customLabels := GetMetricLabels(ctx)
+	for key, value := range customLabels {
+		attrs = append(attrs, attribute.String(key, value))
 	}
 
 	c.requestCounter.Add(c.context, 1, metric.WithAttributes(attrs...))

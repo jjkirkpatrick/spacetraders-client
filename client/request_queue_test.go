@@ -12,17 +12,17 @@ import (
 
 // mockExecutor is a mock implementation of the RequestExecutor interface for testing
 type mockExecutor struct {
-	executeRequestFunc func(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError
+	executeRequestFunc func(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError
 }
 
-func (m *mockExecutor) executeRequest(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
-	return m.executeRequestFunc(method, endpoint, body, queryParams, result)
+func (m *mockExecutor) executeRequest(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+	return m.executeRequestFunc(ctx, method, endpoint, body, queryParams, result)
 }
 
 func TestRequestQueue_Enqueue(t *testing.T) {
 	// Create a mock executor
 	mockExec := &mockExecutor{
-		executeRequestFunc: func(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+		executeRequestFunc: func(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 			// Simulate a successful request
 			return nil
 		},
@@ -42,7 +42,7 @@ func TestRequestQueue_Enqueue(t *testing.T) {
 func TestRequestQueue_ConcurrentRequests(t *testing.T) {
 	// Create a mock executor with a delay to simulate API processing
 	mockExec := &mockExecutor{
-		executeRequestFunc: func(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+		executeRequestFunc: func(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 			// Simulate processing time
 			time.Sleep(100 * time.Millisecond)
 			return nil
@@ -82,7 +82,7 @@ func TestRequestQueue_ConcurrentRequests(t *testing.T) {
 func TestRequestQueue_Shutdown(t *testing.T) {
 	// Create a mock executor
 	mockExec := &mockExecutor{
-		executeRequestFunc: func(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+		executeRequestFunc: func(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 			// Simulate a successful request with some delay
 			time.Sleep(50 * time.Millisecond)
 			return nil
@@ -123,7 +123,7 @@ func TestRequestQueue_RateLimitHandling(t *testing.T) {
 
 	// Create a mock executor that simulates rate limit errors
 	mockExec := &mockExecutor{
-		executeRequestFunc: func(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+		executeRequestFunc: func(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 			mu.Lock()
 			requestCount++
 			count := requestCount
@@ -175,4 +175,54 @@ func TestRequestQueue_RateLimitHandling(t *testing.T) {
 
 	// We should have some successful requests despite rate limiting
 	assert.True(t, successCount > 0)
+}
+
+func TestRequestQueue_EnqueueWithContext(t *testing.T) {
+	mockExec := &mockExecutor{
+		executeRequestFunc: func(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+			return nil
+		},
+	}
+
+	ctx := context.Background()
+	queue := NewRequestQueue(ctx, mockExec, 10)
+	defer queue.Shutdown()
+
+	// Create context with labels
+	reqCtx := WithMetricLabels(context.Background(), map[string]string{
+		"tree_name":   "mining",
+		"action_name": "extract",
+	})
+
+	var result interface{}
+	err := queue.EnqueueWithContext(reqCtx, "GET", "/test", nil, nil, &result)
+	assert.Nil(t, err)
+}
+
+func TestRequestQueue_ContextPropagation(t *testing.T) {
+	var capturedLabels map[string]string
+
+	mockExec := &mockExecutor{
+		executeRequestFunc: func(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+			capturedLabels = GetMetricLabels(ctx)
+			return nil
+		},
+	}
+
+	ctx := context.Background()
+	queue := NewRequestQueue(ctx, mockExec, 10)
+	defer queue.Shutdown()
+
+	reqCtx := WithMetricLabels(context.Background(), map[string]string{
+		"tree_name":   "trader",
+		"action_name": "sell_cargo",
+		"ship_role":   "hauler",
+	})
+	var result interface{}
+	err := queue.EnqueueWithContext(reqCtx, "GET", "/test", nil, nil, &result)
+
+	assert.Nil(t, err)
+	assert.Equal(t, "trader", capturedLabels["tree_name"])
+	assert.Equal(t, "sell_cargo", capturedLabels["action_name"])
+	assert.Equal(t, "hauler", capturedLabels["ship_role"])
 }

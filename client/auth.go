@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -84,7 +85,7 @@ func (c *Client) getOrRegisterToken(faction, symbol, email string) error {
 	c.token = accountToken
 
 	// Use executeRequest directly since requestQueue won't be initialized yet
-	apiErr := c.executeRequest("POST", "/register", registerReq, nil, &registerResp)
+	apiErr := c.executeRequest(context.Background(), "POST", "/register", registerReq, nil, &registerResp)
 	if apiErr != nil {
 		return apiErr
 	}

@@ -14,11 +14,12 @@ import (
 // RequestExecutor is an interface for executing API requests
 // This allows us to mock the client in tests
 type RequestExecutor interface {
-	executeRequest(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError
+	executeRequest(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError
 }
 
 // apiRequest represents a request to be processed by the queue
 type apiRequest struct {
+	ctx         context.Context // Request context for metric labels
 	method      string
 	endpoint    string
 	body        interface{}
@@ -117,7 +118,7 @@ func (q *RequestQueue) processRequests() {
 				// Try the request with retries
 				for retryCount := 0; retryCount <= maxRetries; retryCount++ {
 					// Execute the request
-					err = q.executor.executeRequest(req.method, req.endpoint, req.body, req.queryParams, req.result)
+					err = q.executor.executeRequest(req.ctx, req.method, req.endpoint, req.body, req.queryParams, req.result)
 
 					// If successful or not a rate limit error, break out of retry loop
 					if err == nil || err.Code != 429 {
@@ -273,13 +274,21 @@ func (q *RequestQueue) processRequests() {
 	}
 }
 
-// Enqueue adds a request to the queue and returns a channel for the response
+// Enqueue adds a request to the queue and returns the result.
+// This is a convenience method that uses a background context.
 func (q *RequestQueue) Enqueue(method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+	return q.EnqueueWithContext(context.Background(), method, endpoint, body, queryParams, result)
+}
+
+// EnqueueWithContext adds a request to the queue with context and returns the result.
+// The context can contain custom metric labels via WithMetricLabels.
+func (q *RequestQueue) EnqueueWithContext(ctx context.Context, method, endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
 	// Create a response channel
 	responseCh := make(chan apiResponse, 1)
 
-	// Create the request with current timestamp
+	// Create the request with current timestamp and context
 	req := apiRequest{
+		ctx:         ctx,
 		method:      method,
 		endpoint:    endpoint,
 		body:        body,
