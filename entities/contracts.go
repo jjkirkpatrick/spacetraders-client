@@ -1,6 +1,8 @@
 package entities
 
 import (
+	"context"
+
 	"github.com/jjkirkpatrick/spacetraders-client/client"
 	"github.com/jjkirkpatrick/spacetraders-client/internal/api"
 	"github.com/jjkirkpatrick/spacetraders-client/models"
@@ -9,6 +11,29 @@ import (
 type Contract struct {
 	models.Contract
 	Client *client.Client
+	ctx    context.Context
+}
+
+func (c *Contract) SetContext(ctx context.Context) {
+	c.ctx = ctx
+}
+
+func (c *Contract) getFunc() api.GetFunc {
+	if c.ctx != nil {
+		return func(endpoint string, queryParams map[string]string, result interface{}) *models.APIError {
+			return c.Client.GetWithContext(c.ctx, endpoint, queryParams, result)
+		}
+	}
+	return c.Client.Get
+}
+
+func (c *Contract) postFunc() api.PostFunc {
+	if c.ctx != nil {
+		return func(endpoint string, payload interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+			return c.Client.PostWithContext(c.ctx, endpoint, payload, queryParams, result)
+		}
+	}
+	return c.Client.Post
 }
 
 func ListContracts(c *client.Client) ([]*Contract, error) {
@@ -58,7 +83,7 @@ func GetContract(c *client.Client, symbol string) (*Contract, error) {
 }
 
 func (c *Contract) Accept() (*Agent, *Contract, error) {
-	agent, contract, err := api.AcceptContract(c.Client.Post, c.Contract.ID)
+	agent, contract, err := api.AcceptContract(c.postFunc(), c.Contract.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -74,7 +99,7 @@ func (c *Contract) DeliverCargo(shop *Ship, tradeGood models.GoodSymbol, units i
 		Units:       units,
 	}
 
-	agent, cargo, err := api.DeliverContractCargo(c.Client.Post, c.Contract.ID, contractRequest)
+	agent, cargo, err := api.DeliverContractCargo(c.postFunc(), c.Contract.ID, contractRequest)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -83,7 +108,7 @@ func (c *Contract) DeliverCargo(shop *Ship, tradeGood models.GoodSymbol, units i
 }
 
 func (c *Contract) Fulfill() (*models.Agent, *models.Contract, error) {
-	agent, contract, err := api.FulfillContract(c.Client.Post, c.Contract.ID)
+	agent, contract, err := api.FulfillContract(c.postFunc(), c.Contract.ID)
 	if err != nil {
 		return nil, nil, err
 	}

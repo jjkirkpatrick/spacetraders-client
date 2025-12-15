@@ -2,6 +2,7 @@ package entities
 
 import (
 	"container/heap"
+	"context"
 	"math"
 
 	"github.com/jjkirkpatrick/spacetraders-client/client"
@@ -14,6 +15,43 @@ type Ship struct {
 	models.Ship
 	Client *client.Client
 	Graph  models.Graph
+	ctx    context.Context // Context for metric labels
+}
+
+// SetContext sets the context for all subsequent API calls on this ship.
+// Use client.WithMetricLabels to add custom labels to the context.
+func (s *Ship) SetContext(ctx context.Context) {
+	s.ctx = ctx
+}
+
+// getFunc returns a GetFunc that uses context if available
+func (s *Ship) getFunc() api.GetFunc {
+	if s.ctx != nil {
+		return func(endpoint string, queryParams map[string]string, result interface{}) *models.APIError {
+			return s.Client.GetWithContext(s.ctx, endpoint, queryParams, result)
+		}
+	}
+	return s.Client.Get
+}
+
+// postFunc returns a PostFunc that uses context if available
+func (s *Ship) postFunc() api.PostFunc {
+	if s.ctx != nil {
+		return func(endpoint string, payload interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+			return s.Client.PostWithContext(s.ctx, endpoint, payload, queryParams, result)
+		}
+	}
+	return s.Client.Post
+}
+
+// patchFunc returns a PatchFunc that uses context if available
+func (s *Ship) patchFunc() api.PatchFunc {
+	if s.ctx != nil {
+		return func(endpoint string, body interface{}, queryParams map[string]string, result interface{}) *models.APIError {
+			return s.Client.PatchWithContext(s.ctx, endpoint, body, queryParams, result)
+		}
+	}
+	return s.Client.Patch
 }
 
 func ListShips(c *client.Client) ([]*Ship, error) {
@@ -109,7 +147,7 @@ func (s *Ship) Orbit() (*models.ShipNav, error) {
 		return &s.Nav, nil
 	}
 
-	nav, err := api.OrbitShip(s.Client.Post, s.Symbol)
+	nav, err := api.OrbitShip(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -125,7 +163,7 @@ func (s *Ship) Dock() (*models.ShipNav, error) {
 		return &s.Nav, nil
 	}
 
-	nav, err := api.DockShip(s.Client.Post, s.Symbol)
+	nav, err := api.DockShip(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -136,7 +174,7 @@ func (s *Ship) Dock() (*models.ShipNav, error) {
 }
 
 func (s *Ship) FetchCargo() (*models.Cargo, error) {
-	cargo, err := api.GetShipCargo(s.Client.Get, s.Symbol)
+	cargo, err := api.GetShipCargo(s.getFunc(), s.Symbol)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +189,7 @@ func (s *Ship) Refine(produce string) (*models.Produced, *models.Consumed, error
 		Produce: produce,
 	}
 
-	response, err := api.ShipRefine(s.Client.Post, s.Symbol, refineRequest)
+	response, err := api.ShipRefine(s.postFunc(), s.Symbol, refineRequest)
 	if err != nil {
 		return nil, nil, err.AsError()
 	}
@@ -163,7 +201,7 @@ func (s *Ship) Refine(produce string) (*models.Produced, *models.Consumed, error
 }
 
 func (s *Ship) Chart() (*models.Chart, *models.Waypoint, error) {
-	nav, err := api.CreateChart(s.Client.Post, s.Symbol)
+	nav, err := api.CreateChart(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, nil, err.AsError()
 	}
@@ -172,7 +210,7 @@ func (s *Ship) Chart() (*models.Chart, *models.Waypoint, error) {
 }
 
 func (s *Ship) FetchCooldown() (*models.ShipCooldown, error) {
-	cooldown, err := api.GetShipCooldown(s.Client.Get, s.Symbol)
+	cooldown, err := api.GetShipCooldown(s.getFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -183,7 +221,7 @@ func (s *Ship) FetchCooldown() (*models.ShipCooldown, error) {
 }
 
 func (s *Ship) Survey() ([]models.Survey, error) {
-	response, err := api.CreateSurvey(s.Client.Post, s.Symbol)
+	response, err := api.CreateSurvey(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -194,7 +232,7 @@ func (s *Ship) Survey() ([]models.Survey, error) {
 }
 
 func (s *Ship) Extract() (*models.Extraction, error) {
-	response, err := api.ExtractResources(s.Client.Post, s.Symbol)
+	response, err := api.ExtractResources(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -206,7 +244,7 @@ func (s *Ship) Extract() (*models.Extraction, error) {
 }
 
 func (s *Ship) Siphon() (*models.Extraction, error) {
-	response, err := api.SiphonResources(s.Client.Post, s.Symbol)
+	response, err := api.SiphonResources(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -226,7 +264,7 @@ func (s *Ship) ExtractWithSurvey(survey models.Survey) (*models.Extraction, erro
 		Size:       survey.Size,
 	}
 
-	response, err := api.ExtractResourcesWithSurvey(s.Client.Post, s.Symbol, extractWithSurveyRequest)
+	response, err := api.ExtractResourcesWithSurvey(s.postFunc(), s.Symbol, extractWithSurveyRequest)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -243,7 +281,7 @@ func (s *Ship) Jettison(goodSymbol models.GoodSymbol, units int) (*models.Cargo,
 		Units:  units,
 	}
 
-	response, err := api.JettisonCargo(s.Client.Post, s.Symbol, jettisonRequest)
+	response, err := api.JettisonCargo(s.postFunc(), s.Symbol, jettisonRequest)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -258,7 +296,7 @@ func (s *Ship) Jump(systemSymbol string) (*models.ShipNav, *models.ShipCooldown,
 		WaypointSymbol: systemSymbol,
 	}
 
-	response, err := api.JumpShip(s.Client.Post, s.Symbol, jumpRequest)
+	response, err := api.JumpShip(s.postFunc(), s.Symbol, jumpRequest)
 	if err != nil {
 		return nil, nil, nil, nil, err.AsError()
 	}
@@ -274,7 +312,7 @@ func (s *Ship) Navigate(waypointSymbol string) (*models.FuelDetails, *models.Shi
 		WaypointSymbol: waypointSymbol,
 	}
 
-	response, err := api.NavigateShip(s.Client.Post, s.Symbol, navigateRequest)
+	response, err := api.NavigateShip(s.postFunc(), s.Symbol, navigateRequest)
 	if err != nil {
 		return nil, nil, nil, err.AsError()
 	}
@@ -290,7 +328,7 @@ func (s *Ship) SetFlightMode(flightmode models.FlightMode) error {
 		FlightMode: flightmode,
 	}
 
-	response, err := api.PatchShipNav(s.Client.Patch, s.Symbol, flightModeRequest)
+	response, err := api.PatchShipNav(s.patchFunc(), s.Symbol, flightModeRequest)
 	if err != nil {
 		return err.AsError()
 	}
@@ -305,7 +343,7 @@ func (s *Ship) SetFlightMode(flightmode models.FlightMode) error {
 }
 
 func (s *Ship) FetchNavigationStatus() (*models.ShipNav, error) {
-	response, err := api.GetShipNav(s.Client.Get, s.Symbol)
+	response, err := api.GetShipNav(s.getFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -318,7 +356,7 @@ func (s *Ship) Warp(waypointSymbol string) (*models.FuelDetails, *models.ShipNav
 		WaypointSymbol: waypointSymbol,
 	}
 
-	response, err := api.WarpShip(s.Client.Post, s.Symbol, warpRequest)
+	response, err := api.WarpShip(s.postFunc(), s.Symbol, warpRequest)
 	if err != nil {
 		return nil, nil, err.AsError()
 	}
@@ -335,7 +373,7 @@ func (s *Ship) SellCargo(goodSymbol models.GoodSymbol, units int) (*models.Agent
 		Units:  units,
 	}
 
-	response, err := api.SellCargo(s.Client.Post, s.Symbol, sellRequest)
+	response, err := api.SellCargo(s.postFunc(), s.Symbol, sellRequest)
 	if err != nil {
 		return nil, nil, nil, err.AsError()
 	}
@@ -346,7 +384,7 @@ func (s *Ship) SellCargo(goodSymbol models.GoodSymbol, units int) (*models.Agent
 }
 
 func (s *Ship) ScanSystems() (*models.ShipCooldown, []models.System, error) {
-	response, err := api.ScanSystems(s.Client.Post, s.Symbol)
+	response, err := api.ScanSystems(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, nil, err.AsError()
 	}
@@ -357,7 +395,7 @@ func (s *Ship) ScanSystems() (*models.ShipCooldown, []models.System, error) {
 }
 
 func (s *Ship) ScanWaypoints() (*models.ShipCooldown, []models.Waypoint, error) {
-	response, err := api.ScanWaypoints(s.Client.Post, s.Symbol)
+	response, err := api.ScanWaypoints(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, nil, err.AsError()
 	}
@@ -377,7 +415,7 @@ func (s *Ship) Refuel(amount int, fromCargo bool) (*models.Agent, *models.FuelDe
 		refuelRequest.Units = amount
 	}
 
-	response, err := api.RefuelShip(s.Client.Post, s.Symbol, refuelRequest)
+	response, err := api.RefuelShip(s.postFunc(), s.Symbol, refuelRequest)
 	if err != nil {
 		log.Error().Msgf("Error refueling ship %s: %v", s.Symbol, err.Data)
 		return nil, nil, nil, err.AsError()
@@ -394,7 +432,7 @@ func (s *Ship) PurchaseCargo(goodSymbol models.GoodSymbol, units int) (*models.A
 		Units:  units,
 	}
 
-	response, err := api.PurchaseCargo(s.Client.Post, s.Symbol, purchaseRequest)
+	response, err := api.PurchaseCargo(s.postFunc(), s.Symbol, purchaseRequest)
 	if err != nil {
 		return nil, nil, nil, err.AsError()
 	}
@@ -411,7 +449,7 @@ func (s *Ship) TransferCargo(goodSymbol models.GoodSymbol, units int, shipSymbol
 		ShipSymbol:  shipSymbol,
 	}
 
-	response, err := api.TransferCargo(s.Client.Post, s.Symbol, transferRequest)
+	response, err := api.TransferCargo(s.postFunc(), s.Symbol, transferRequest)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -423,7 +461,7 @@ func (s *Ship) TransferCargo(goodSymbol models.GoodSymbol, units int, shipSymbol
 
 func (s *Ship) NegotiateContract() (*models.Contract, error) {
 
-	response, err := api.NegotiateContract(s.Client.Post, s.Symbol)
+	response, err := api.NegotiateContract(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -432,7 +470,7 @@ func (s *Ship) NegotiateContract() (*models.Contract, error) {
 }
 
 func (s *Ship) GetMounts() ([]models.ShipMount, error) {
-	response, err := api.GetMounts(s.Client.Get, s.Symbol)
+	response, err := api.GetMounts(s.getFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -445,7 +483,7 @@ func (s *Ship) InstallMount(mountSymbol models.MountSymbol) (*models.Agent, []mo
 		Symbol: mountSymbol,
 	}
 
-	response, err := api.InstallMount(s.Client.Post, s.Symbol, installRequest)
+	response, err := api.InstallMount(s.postFunc(), s.Symbol, installRequest)
 	if err != nil {
 		return nil, nil, nil, nil, err.AsError()
 	}
@@ -460,7 +498,7 @@ func (s *Ship) RemoveMount(mountSymbol models.MountSymbol) (*models.Agent, []mod
 		Symbol: mountSymbol,
 	}
 
-	response, err := api.RemoveMount(s.Client.Post, s.Symbol, removeRequest)
+	response, err := api.RemoveMount(s.postFunc(), s.Symbol, removeRequest)
 	if err != nil {
 		return nil, nil, nil, nil, err.AsError()
 	}
@@ -471,7 +509,7 @@ func (s *Ship) RemoveMount(mountSymbol models.MountSymbol) (*models.Agent, []mod
 }
 
 func (s *Ship) GetScrapPrice() (*models.Transaction, error) {
-	response, err := api.GetScrapShip(s.Client.Get, s.Symbol)
+	response, err := api.GetScrapShip(s.getFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -480,7 +518,7 @@ func (s *Ship) GetScrapPrice() (*models.Transaction, error) {
 }
 
 func (s *Ship) ScrapShip() (*models.Transaction, error) {
-	response, err := api.ScrapShip(s.Client.Post, s.Symbol)
+	response, err := api.ScrapShip(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -491,7 +529,7 @@ func (s *Ship) ScrapShip() (*models.Transaction, error) {
 }
 
 func (s *Ship) GetRepairPrice() (*models.Transaction, error) {
-	response, err := api.GetRepairShip(s.Client.Get, s.Symbol)
+	response, err := api.GetRepairShip(s.getFunc(), s.Symbol)
 	if err != nil {
 		return nil, err.AsError()
 	}
@@ -500,7 +538,7 @@ func (s *Ship) GetRepairPrice() (*models.Transaction, error) {
 }
 
 func (s *Ship) RepairShip() (*models.Ship, *models.Transaction, error) {
-	response, err := api.RepairShip(s.Client.Post, s.Symbol)
+	response, err := api.RepairShip(s.postFunc(), s.Symbol)
 	if err != nil {
 		return nil, nil, err.AsError()
 	}
