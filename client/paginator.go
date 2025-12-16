@@ -122,9 +122,9 @@ func (p *Paginator[T]) FetchAllPages() ([]T, error) {
 		}()
 	}
 
-	// Send pages to workers
+	// Send pages to workers (start at 2 since page 1 already fetched)
 	go func() {
-		for page := 1; page <= totalPages; page++ {
+		for page := 2; page <= totalPages; page++ {
 			pages <- page
 		}
 		close(pages)

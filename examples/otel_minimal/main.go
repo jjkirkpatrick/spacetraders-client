@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -19,8 +20,8 @@ func main() {
 
 	// Configure client with telemetry
 	options := client.DefaultClientOptions()
-	options.Symbol = "OTEL-DEMO"          // Your agent symbol
-	options.Faction = "COSMIC"            // Starting faction
+	options.Symbol = "BLUE-2"  // Your agent symbol
+	options.Faction = "COSMIC" // Starting faction
 	options.TelemetryOptions = client.DefaultTelemetryOptions()
 	options.TelemetryOptions.ServiceName = "spacetraders-otel-demo"
 	options.TelemetryOptions.ServiceVersion = "1.0.0"
@@ -81,4 +82,15 @@ func main() {
 	)
 
 	slog.InfoContext(ctx, "Demo complete - check Grafana for traces (Tempo), logs (Loki), and metrics")
+
+	ships, err := entities.ListShips(c)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, ship := range ships {
+		slog.Info("Ship", "symbol", ship.Symbol)
+	}
+
 }
